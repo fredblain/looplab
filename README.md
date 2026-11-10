@@ -1,6 +1,8 @@
-# Loop Lab (interactive)
+# Tutorial: Loops in Python
 
-Open **`loop_lab.html`** in any web browser (double-click it). It opens on a **Start** page that
+## Loop Lab (interactive)
+
+Open **`index.html`** in any web browser (double-click it). It opens on a **Start** page that
 explains the screen and the activities, then has three activities:
 
 - **Step through**: run a loop one line at a time and watch the variables change. With *Predict* on,
@@ -17,7 +19,7 @@ strings, lists, `for`, `while`, `if`, `break`, `print`, `range`, `len`, ...), no
 ## Folder contents
 
 ```
-loop_lab.html       interactive Loop Lab (open in a browser)
+index.html          interactive Loop Lab (open in a browser)
 LICENSE             licence for the teaching content (CC BY 4.0)
 LICENSE-CODE        licence for the code (MIT)
 ```
