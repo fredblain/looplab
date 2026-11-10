@@ -1,0 +1,2363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!--
+  Loop Lab. Copyright (c) 2026 Frédéric Blain.
+  Content licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/),
+  code under the MIT License (see LICENSE and LICENSE-CODE).
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Loop Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: a lab bench. Sticky header with three tabs; a two-column workbench
+   (code on the left, the program's memory on the right) and the trace table
+   running full width underneath, like the paper tables students fill in. */
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --ink: #17202c;
+  --muted: #586374;
+  --line: #d5dbe4;
+  --code-bg: #f8f9fc;
+  --accent: #1f56d1;
+  --accent-soft: #e2e9fb;
+  --on-accent: #ffffff;
+  --mark: #ffe27a;
+  --mark-ink: #3b2f00;
+  --good: #1b7a4b;
+  --good-soft: #e0f2e7;
+  --bad: #b3362d;
+  --bad-soft: #fbe4e1;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10141b; --surface: #181e28; --ink: #e5e9f0; --muted: #9aa5b5; --line: #2b3442;
+    --code-bg: #141a23; --accent: #7ea4ff; --accent-soft: #1f2b45; --on-accent: #0c1220;
+    --mark: #6d5a10; --mark-ink: #fff2c2; --good: #63d39c; --good-soft: #153222;
+    --bad: #ff8d84; --bad-soft: #3b1815; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10141b; --surface: #181e28; --ink: #e5e9f0; --muted: #9aa5b5; --line: #2b3442;
+  --code-bg: #141a23; --accent: #7ea4ff; --accent-soft: #1f2b45; --on-accent: #0c1220;
+  --mark: #6d5a10; --mark-ink: #fff2c2; --good: #63d39c; --good-soft: #153222;
+  --bad: #ff8d84; --bad-soft: #3b1815; color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+}
+table { font-size: inherit; border-collapse: collapse; }
+button, input, select, textarea { font: inherit; color: inherit; }
+code, .mono { font-family: var(--font-code); font-size: 0.92em; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.2; }
+
+.wrap {
+  max-width: 1180px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- header ---------- */
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--surface);
+}
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.top .wrap { display: flex; align-items: center; gap: 12px 28px; flex-wrap: wrap; padding-block: 10px; }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand h1 { font-size: 1.35rem; letter-spacing: -0.01em; }
+.brand h1 span { color: var(--accent); }
+.brand small { font-family: var(--font-code); color: var(--muted); font-size: 0.78rem; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab {
+  border: 1px solid transparent; background: transparent; border-radius: 999px;
+  padding: 6px 14px; cursor: pointer; color: var(--muted); font-weight: 500;
+}
+.tab:hover { color: var(--ink); background: var(--bg); }
+.tab[aria-selected="true"] { background: var(--accent); color: var(--on-accent); }
+
+main.wrap { padding-block: 20px 48px; display: grid; gap: 16px; }
+.intro { color: var(--muted); max-width: 70ch; margin: 0; }
+.intro strong { color: var(--ink); }
+
+/* ---------- generic pieces ---------- */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+.panel-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--line);
+}
+.label { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--muted); }
+.panel-body { padding: 14px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.field { display: flex; align-items: center; gap: 8px; }
+select, input[type="text"] {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; max-width: 100%;
+}
+select { min-width: 0; }
+.btn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 7px 14px; cursor: pointer; font-weight: 500; white-space: nowrap;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover:not(:disabled) { color: var(--on-accent); filter: brightness(1.08); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--ink); font-size: 0.85rem; font-variant-numeric: tabular-nums;
+}
+.msg { border-radius: 8px; padding: 10px 12px; margin: 0; }
+.msg.good { background: var(--good-soft); color: var(--good); }
+.msg.bad { background: var(--bad-soft); color: var(--bad); }
+.msg.info { background: var(--accent-soft); }
+.msg strong { font-weight: 600; }
+
+/* ---------- code view ---------- */
+.code {
+  list-style: none; margin: 0; padding: 10px 0; background: var(--code-bg);
+  font-family: var(--font-code); font-size: 0.9rem; overflow-x: auto; counter-reset: none;
+}
+.code li { display: grid; grid-template-columns: 2.2em 3ch auto; align-items: center; white-space: pre; padding-right: 14px; min-height: 1.75em; }
+.code .ln { color: var(--muted); text-align: right; font-size: 0.8rem; padding-right: 2px; }
+.code .mk { text-align: center; font-weight: 600; }
+.code li.ran { background: var(--accent-soft); }
+.code li.ran .mk::before { content: "\2713"; color: var(--accent); }
+.code li.next .mk::before { content: "\2192"; color: var(--accent); }
+.code li.next .src { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 4px; text-decoration-thickness: 2px; }
+.code li.err { background: var(--bad-soft); }
+.code li.err .mk::before { content: "!"; color: var(--bad); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8rem; color: var(--muted); }
+.legend b { color: var(--accent); font-family: var(--font-code); }
+
+textarea.editor {
+  width: 100%; min-height: 260px; resize: vertical; display: block; border: 0; outline-offset: -2px;
+  background: var(--code-bg); padding: 12px 14px; font-family: var(--font-code); font-size: 0.9rem;
+  line-height: 1.75; tab-size: 4; white-space: pre; overflow-x: auto;
+}
+
+/* ---------- stepper ---------- */
+.bench { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.side { display: grid; gap: 16px; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: center; }
+.controls .grow { flex: 1; }
+.stepcount { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.85rem; }
+
+.prompt { border-top: 1px solid var(--line); padding: 14px; display: grid; gap: 12px; background: var(--surface); }
+.prompt-q { margin: 0; }
+.prompt-q code { background: var(--code-bg); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); }
+.guess { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 10px; align-items: center; }
+.guess label { font-family: var(--font-code); font-weight: 600; }
+.guess input { font-family: var(--font-code); width: 100%; }
+.guess input.right { border-color: var(--good); background: var(--good-soft); }
+.guess input.wrong { border-color: var(--bad); background: var(--bad-soft); }
+.prompt-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.vars { display: grid; gap: 8px; }
+.empty { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.var {
+  display: grid; grid-template-columns: minmax(70px, max-content) minmax(0, 1fr); gap: 4px 12px; align-items: center;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+}
+.var-name { font-family: var(--font-code); font-weight: 600; }
+.var-name small { display: block; font-family: var(--font-body); font-weight: 400; color: var(--muted); font-size: 0.72rem; }
+.var-val { font-family: var(--font-code); overflow-x: auto; white-space: nowrap; }
+.var.changed { border-color: var(--mark); }
+.var.changed .var-val > .scalar, .var.changed .cells { background: var(--mark); color: var(--mark-ink); border-radius: 4px; }
+.scalar { padding: 1px 6px; display: inline-block; }
+.cells { display: inline-flex; gap: 0; padding: 2px; }
+.cell { display: inline-grid; justify-items: center; min-width: 2.4em; border: 1px solid var(--line); margin-left: -1px; background: var(--surface); color: var(--ink); }
+.cell .v { padding: 2px 6px; }
+.cell .ix { font-size: 0.68rem; color: var(--muted); border-top: 1px dashed var(--line); width: 100%; text-align: center; }
+.cells.empty-list { padding: 1px 6px; }
+@media (prefers-reduced-motion: no-preference) {
+  .var.flash { animation: flash 0.7s ease-out; }
+  @keyframes flash { from { transform: scale(1.03); } to { transform: none; } }
+}
+
+.output { margin: 0; padding: 12px 14px; font-family: var(--font-code); font-size: 0.9rem; min-height: 3.2em; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--code-bg); border-radius: 0 0 var(--radius) var(--radius); }
+.output .none { color: var(--muted); font-family: var(--font-body); }
+.errbox { margin: 0 14px 14px; }
+.note { margin: 0; padding: 12px 14px; font-size: 0.92rem; }
+.note:empty { display: none; }
+
+/* ---------- trace tables ---------- */
+.table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+.trace { width: 100%; font-variant-numeric: tabular-nums; }
+.trace th, .trace td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: middle; }
+.trace thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.trace thead th.var-col { font-family: var(--font-code); text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--ink); }
+.trace td.code-cell, .trace td.val { font-family: var(--font-code); font-size: 0.86rem; }
+.trace td.num { color: var(--muted); }
+.trace td.chg span { background: var(--mark); color: var(--mark-ink); padding: 1px 5px; border-radius: 4px; }
+.trace td.unset { color: var(--muted); }
+.trace tr.err-row td { background: var(--bad-soft); }
+.trace tr.current td { background: var(--accent-soft); }
+.trace td input { width: 100%; min-width: 7ch; font-family: var(--font-code); padding: 4px 6px; }
+.trace td input.wrong { border-color: var(--bad); background: var(--bad-soft); }
+.trace td input.right { border-color: var(--good); background: var(--good-soft); }
+.trace td.ok { color: var(--good); }
+.trace td.late { color: var(--muted); }
+.trace .badge { font-size: 0.75rem; }
+
+/* ---------- puzzles ---------- */
+.pz-top { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.progress { flex: 1 1 140px; max-width: 260px; height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.progress span { display: block; height: 100%; width: 0; background: var(--good); border-radius: inherit; }
+@media (prefers-reduced-motion: no-preference) { .progress span { transition: width 0.3s ease-out; } }
+.reset { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.reset-q { font-size: 0.9rem; font-weight: 500; }
+.reset-done { font-size: 0.88rem; color: var(--good); font-weight: 500; }
+.btn.subtle { color: var(--muted); }
+.btn.danger { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+.btn.danger:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); filter: brightness(1.04); }
+.pz-sections { display: grid; gap: 10px; }
+.pz-row { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 6px 14px; align-items: center; }
+.pz-sec { display: flex; justify-content: space-between; gap: 8px; font-weight: 500; font-size: 0.92rem; }
+.pz-sec small { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.pz-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pz-num {
+  position: relative; width: 40px; height: 34px; border: 1px solid var(--line); background: var(--surface);
+  border-radius: 8px; cursor: pointer; font-variant-numeric: tabular-nums; font-weight: 500;
+}
+.pz-num:hover { border-color: var(--accent); }
+.pz-num.solved { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+.pz-num.solved::after {
+  content: "\2713"; position: absolute; top: -7px; right: -6px; width: 16px; height: 16px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 0.68rem; line-height: 1; background: var(--good); color: var(--surface);
+}
+.pz-num[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-nav { display: flex; gap: 6px; }
+.site-foot { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--line); padding-top: 14px; margin: 8px 0 0; }
+.site-foot a { color: inherit; }
+.tip { font-size: 0.9rem; background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; }
+.solved-badge { font-family: var(--font-body); font-size: 0.8rem; font-weight: 600; color: var(--good); margin-left: 8px; white-space: nowrap; }
+@media (max-width: 640px) { .pz-row { grid-template-columns: minmax(0, 1fr); } }
+.task { display: grid; gap: 8px; }
+.task p { margin: 0; }
+.given { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.92rem; }
+.given code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; white-space: pre; }
+.board { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; align-items: start; }
+.pool, .program { list-style: none; margin: 0; padding: 10px; display: grid; gap: 6px; min-height: 120px; background: var(--code-bg); border-radius: 0 0 var(--radius) var(--radius); }
+.pool button {
+  width: 100%; display: flex; align-items: center; gap: 6px;
+  text-align: left; font-family: var(--font-code); font-size: 0.88rem; padding: 4px 10px 4px 4px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--surface); cursor: pointer; white-space: pre; overflow-x: auto;
+  user-select: none; -webkit-user-select: none;
+}
+.pool button:hover { border-color: var(--accent); }
+.pool.drop-remove { outline: 2px dashed var(--bad); outline-offset: -4px; }
+.grip {
+  flex: none; width: 22px; height: 30px; display: grid; place-items: center; border-radius: 6px;
+  color: var(--muted); cursor: grab; touch-action: none; font-size: 1rem; line-height: 1;
+}
+.grip:hover { color: var(--accent); background: var(--accent-soft); }
+.prog-line { display: grid; grid-template-columns: 62px 22px minmax(0, 1fr) 94px; gap: 6px; align-items: center; }
+.prog-line.dragging { display: none; }
+.prog-line.placeholder .src { border: 2px dashed var(--accent); background-color: var(--accent-soft); color: var(--muted); }
+.is-dragging .program .empty { display: none; }
+.is-dragging, .is-dragging * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
+.drag-ghost {
+  position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; white-space: pre;
+  font-family: var(--font-code); font-size: 0.88rem; padding: 7px 10px; border: 1px solid var(--accent);
+  border-radius: 6px; background: var(--surface); color: var(--ink); box-shadow: 0 10px 28px rgba(15, 25, 45, 0.22);
+}
+.indent-probe { position: absolute; visibility: hidden; white-space: pre; font-family: var(--font-code); font-size: 0.88rem; }
+.prog-line .src {
+  font-family: var(--font-code); font-size: 0.88rem; padding: 7px 10px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--surface); white-space: pre; overflow-x: auto;
+  cursor: grab; user-select: none; -webkit-user-select: none;
+  background-image: repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px 4ch);
+  background-size: calc(var(--indent) * 4ch) 100%; background-repeat: no-repeat; background-position: 10px 0;
+}
+.mini { display: flex; gap: 2px; }
+.mini button {
+  width: 30px; height: 30px; border: 1px solid var(--line); background: var(--surface); border-radius: 6px;
+  cursor: pointer; font-family: var(--font-code); padding: 0; line-height: 1;
+}
+.mini button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.mini button:disabled { opacity: 0.35; cursor: default; }
+.results { display: grid; gap: 6px; }
+.result { font-size: 0.9rem; display: grid; grid-template-columns: 1.4em minmax(0, 1fr); gap: 6px; }
+.result .ic { font-weight: 700; }
+.result.pass .ic { color: var(--good); }
+.result.fail .ic { color: var(--bad); }
+.result code { white-space: pre-wrap; }
+
+/* ---------- start (landing) ---------- */
+.home { display: grid; gap: 28px; }
+.hero { display: grid; gap: 12px; padding-block: 12px 4px; }
+.hero h2 { font-size: clamp(1.6rem, 4vw, 2.3rem); letter-spacing: -0.02em; max-width: 24ch; }
+.hero p { margin: 0; max-width: 64ch; color: var(--muted); font-size: 1.02rem; }
+.hero p strong { color: var(--ink); }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+a.btn { text-decoration: none; display: inline-block; }
+.section-title { font-size: 1.1rem; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 12px; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+}
+.card-num {
+  font-family: var(--font-code); font-weight: 600; font-size: 0.8rem; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent-soft); color: var(--accent);
+}
+.card h4 { font-family: var(--font-display); font-size: 1.15rem; margin: 0; }
+.card-lead { margin: 0; font-weight: 500; }
+.card ul { margin: 0; padding-left: 1.1em; display: grid; gap: 4px; font-size: 0.92rem; color: var(--muted); flex: 1; }
+.card ul b { color: var(--ink); font-weight: 600; }
+.card .btn { align-self: flex-start; margin-top: 6px; }
+.read-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 20px; align-items: start; }
+.read-demo { display: grid; gap: 10px; min-width: 0; }
+.read-demo .code { border-radius: 8px; }
+.read-list { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 16px; font-size: 0.92rem; }
+.read-list dt { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.read-list dd { margin: 0; color: var(--muted); }
+.read-list .sym { color: var(--accent); font-family: var(--font-code); }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; background: var(--mark); }
+.tips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 0.92rem; }
+.small { margin: 0 0 8px; font-size: 0.92rem; }
+.small:last-child { margin-bottom: 0; }
+kbd {
+  font-family: var(--font-code); font-size: 0.82em; padding: 1px 6px; border: 1px solid var(--line);
+  border-bottom-width: 2px; border-radius: 5px; background: var(--code-bg);
+}
+
+@media (max-width: 860px) {
+  .bench, .board, .cards, .read-grid, .tips { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .read-list { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .read-list dd { margin-bottom: 8px; }
+  /* phone: the code gets the full width, its buttons go underneath */
+  .program { gap: 12px; }
+  .prog-line {
+    grid-template-columns: 22px auto minmax(0, 1fr);
+    grid-template-areas: "grip src src" ". ind move"; row-gap: 4px;
+  }
+  .prog-line > :nth-child(1) { grid-area: ind; }
+  .prog-line > :nth-child(2) { grid-area: grip; }
+  .prog-line > :nth-child(3) { grid-area: src; }
+  .prog-line > :nth-child(4) { grid-area: move; justify-self: end; }
+}
+@media (max-width: 480px) {
+  .brand small { display: none; }
+  .tab { padding: 6px 10px; }
+  .controls .btn { padding: 7px 10px; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><h1>Loop<span>Lab</span></h1><small>for · while · trace</small></div>
+    <nav class="tabs" role="tablist" aria-label="Loop Lab activities">
+      <button class="tab" role="tab" id="tab-home" data-view="home" aria-selected="true">Start</button>
+      <button class="tab" role="tab" id="tab-step" data-view="step" aria-selected="false">Step through</button>
+      <button class="tab" role="tab" id="tab-trace" data-view="trace" aria-selected="false">Trace table</button>
+      <button class="tab" role="tab" id="tab-puzzles" data-view="puzzles" aria-selected="false">Line puzzles</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ===================== START (landing) ===================== -->
+<section id="view-home" role="tabpanel" aria-labelledby="tab-home">
+  <div class="home">
+    <div class="hero">
+      <h2>See what a loop does, one line at a time</h2>
+      <p>A loop repeats the same few lines, and each round some variables get new values. Most loop
+        mistakes happen because those values are invisible. Loop Lab shows them: you run short Python
+        programs step by step, <strong>predict</strong> what happens next, and check yourself straight away.</p>
+      <div class="hero-actions">
+        <a class="btn primary" href="#step">Start with Step through</a>
+        <span class="chip" id="homeProgress">Puzzles solved: 0 / 30</span>
+        <span class="reset" data-reset></span>
+      </div>
+    </div>
+
+    <div>
+      <h3 class="section-title">Three activities <span class="stepcount">do them in this order</span></h3>
+      <div class="cards">
+        <article class="card">
+          <span class="card-num">1</span>
+          <h4>Step through</h4>
+          <p class="card-lead">Watch a loop run line by line.</p>
+          <ul>
+            <li>Pick a program from the menu and press <b>Step</b>.</li>
+            <li>With <b>Predict</b> on, you type the new value of a variable (or what gets printed) <em>before</em> Python shows it.</li>
+            <li>The <b>Spot the bug</b> programs are broken. Find the step where it goes wrong, then press <b>Edit code</b> to fix it.</li>
+            <li>You can also type and run your own loops.</li>
+          </ul>
+          <a class="btn" href="#step">Open Step through</a>
+        </article>
+        <article class="card">
+          <span class="card-num">2</span>
+          <h4>Trace table</h4>
+          <p class="card-lead">Be the computer.</p>
+          <ul>
+            <li>Fill in the trace table yourself, one row per line that Python runs.</li>
+            <li>For each row, write the value of every variable <em>after</em> that line, and anything it prints.</li>
+            <li>Every cell is checked. After two wrong tries you can reveal the row.</li>
+            <li>This is the same skill you need for paper exercises and exams.</li>
+          </ul>
+          <a class="btn" href="#trace">Open Trace table</a>
+        </article>
+        <article class="card">
+          <span class="card-num">3</span>
+          <h4>Line puzzles</h4>
+          <p class="card-lead">Build a loop from the lines given.</p>
+          <ul>
+            <li>All the lines you need are given, shuffled. Drag them into order, and drag left or right to indent them.</li>
+            <li>One line in each puzzle is a trap: it looks right but does not belong.</li>
+            <li><b>Check</b> tests your program on several inputs.</li>
+            <li><b>Watch it run</b> opens your answer in Step through.</li>
+          </ul>
+          <a class="btn" href="#puzzles">Open Line puzzles</a>
+        </article>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span class="label">How to read the screen</span></div>
+      <div class="panel-body read-grid">
+        <div class="read-demo">
+          <ol class="code" aria-label="Example code">
+            <li class="ran"><span class="ln">3</span><span class="mk" aria-hidden="true"></span><span class="src">for n in numbers:</span></li>
+            <li class="next"><span class="ln">4</span><span class="mk" aria-hidden="true"></span><span class="src">    total = total + n</span></li>
+          </ol>
+          <div class="vars">
+            <div class="var"><div class="var-name">numbers<small>list</small></div>
+              <div class="var-val"><span class="cells"><span class="cell"><span class="v">3</span><span class="ix">0</span></span><span class="cell"><span class="v">5</span><span class="ix">1</span></span><span class="cell"><span class="v">2</span><span class="ix">2</span></span></span></div></div>
+            <div class="var"><div class="var-name">total<small>int</small></div><div class="var-val"><span class="scalar">3</span></div></div>
+            <div class="var changed"><div class="var-name">n<small>int</small></div><div class="var-val"><span class="scalar">5</span></div></div>
+          </div>
+        </div>
+        <dl class="read-list">
+          <dt><b class="sym">&#10003;</b> just ran</dt><dd>The line Python has just run. The variables show their values <em>after</em> this line.</dd>
+          <dt><b class="sym">&#8594;</b> runs next</dt><dd>The line Python will run when you press Step.</dd>
+          <dt><span class="swatch"></span> highlighted</dt><dd>This value has just changed. Here, the for line has just given <code>n</code> its next value, 5.</dd>
+          <dt>Boxes</dt><dd>A list is drawn as boxes: the value on top, its <strong>position</strong> underneath. Positions start at 0.</dd>
+          <dt>Small word</dt><dd>The kind of value: <code>int</code> (whole number), <code>float</code> (decimal, like 7.0), <code>str</code> (text), <code>list</code>.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="tips">
+      <div class="panel">
+        <div class="panel-head"><span class="label">When you are stuck</span></div>
+        <div class="panel-body">
+          <ol class="plain">
+            <li>Say out loud what you expect after each step.</li>
+            <li>Step until the first value that surprises you.</li>
+            <li>The mistake is in that line, or just before it.</li>
+            <li>Still stuck? Show your teacher the step number.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="label">Shortcuts</span></div>
+        <div class="panel-body">
+          <ul class="plain">
+            <li><kbd>&#8594;</kbd> next step, <kbd>&#8592;</kbd> step back (in Step through)</li>
+            <li><kbd>Enter</kbd> checks your answer</li>
+            <li><kbd>Tab</kbd> inserts 4 spaces in the code editor</li>
+          </ul>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="label">What Python works here</span></div>
+        <div class="panel-body">
+          <p class="small">Variables, numbers, strings, lists, <code>for</code>, <code>while</code>, <code>if</code> /
+            <code>elif</code> / <code>else</code>, <code>break</code>, <code>continue</code>, <code>print</code>,
+            <code>range</code>, <code>len</code>, <code>min</code>, <code>max</code>, <code>sum</code>,
+            <code>.append()</code> and a few more.</p>
+          <p class="small">Not supported: functions (<code>def</code>, <code>return</code>), <code>input()</code>, slices like <code>a[1:3]</code>.
+            Programs stop after 300 steps, so an endless loop cannot freeze the page.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="label">Your progress</span></div>
+        <div class="panel-body">
+          <p class="small">Solved puzzles and your settings are saved in this browser only. Nothing is sent
+            anywhere and nobody else can see your answers. Another computer or a private window starts fresh.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== STEP THROUGH ===================== -->
+<section id="view-step" role="tabpanel" aria-labelledby="tab-step" hidden>
+  <div style="display:grid; gap:16px">
+    <p class="intro">Run a loop <strong>one line at a time</strong> and watch the variables change.
+      With <strong>Predict</strong> on, you type what will happen before Python shows you.</p>
+
+    <div class="toolbar">
+      <label class="field"><span class="label">Program</span><select id="preset"></select></label>
+      <label class="switch"><input type="checkbox" id="predictToggle" checked> Predict each step</label>
+      <span class="chip" id="score">Predictions: 0 / 0</span>
+    </div>
+
+    <div class="bench">
+      <div class="panel">
+        <div class="panel-head">
+          <span class="label" id="codeTitle">Code</span>
+          <div class="legend"><span><b>&#8594;</b> runs next</span><span><b>&#10003;</b> just ran</span></div>
+        </div>
+        <ol class="code" id="codeView" aria-label="Program code"></ol>
+        <div id="editWrap" hidden>
+          <textarea class="editor" id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Edit the program"></textarea>
+          <div class="controls">
+            <button class="btn primary" id="runEdit">Run my code</button>
+            <button class="btn" id="cancelEdit">Cancel</button>
+            <span class="stepcount">Tab inserts 4 spaces.</span>
+          </div>
+          <div id="editError" class="errbox" hidden></div>
+        </div>
+        <div class="controls" id="controls">
+          <button class="btn" id="btnReset" title="Back to the start">Restart</button>
+          <button class="btn" id="btnBack" title="Previous step (left arrow)">&#8592; Back</button>
+          <button class="btn primary" id="btnStep" title="Next step (right arrow)">Step &#8594;</button>
+          <button class="btn" id="btnPlay">Play</button>
+          <span class="grow"></span>
+          <span class="stepcount" id="stepCount">Step 0 / 0</span>
+          <button class="btn" id="btnEdit">Edit code</button>
+        </div>
+        <div class="prompt" id="prompt" hidden>
+          <p class="prompt-q" id="promptQ"></p>
+          <form class="guess" id="guessForm" autocomplete="off"></form>
+          <p class="msg bad" id="promptMsg" hidden></p>
+          <div class="prompt-actions">
+            <button class="btn primary" id="btnCheck" type="button">Check</button>
+            <button class="btn" id="btnShow" type="button">Show me</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="side">
+        <div class="panel">
+          <div class="panel-head"><span class="label">Variables</span><span class="stepcount">values after the line that just ran</span></div>
+          <div class="panel-body"><div class="vars" id="vars"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="label">Printed output</span></div>
+          <pre class="output" id="output"></pre>
+          <div id="runError" class="errbox" hidden></div>
+        </div>
+        <div class="panel"><p class="note" id="note"></p></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><span class="label">Trace table</span><span class="stepcount">one row per line Python ran, as you would write it on paper</span></div>
+      <div class="table-wrap" id="traceWrap"><table class="trace" id="traceTable"></table></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TRACE TABLE CHALLENGE ===================== -->
+<section id="view-trace" role="tabpanel" aria-labelledby="tab-trace" hidden>
+  <div style="display:grid; gap:16px">
+    <p class="intro">Be the computer. Fill in the trace table <strong>one row at a time</strong>: the value of every
+      variable <strong>after</strong> that line runs, and anything it prints. Values from the row above are filled
+      in for you, so change only what changes.</p>
+    <div class="toolbar">
+      <label class="field"><span class="label">Program</span><select id="tPreset"></select></label>
+      <span class="chip" id="tScore">Right first time: 0 / 0</span>
+      <button class="btn" id="tRestart">Start again</button>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <div class="panel-head"><span class="label">Code</span><div class="legend"><span><b>&#10003;</b> the line for the current row</span></div></div>
+        <ol class="code" id="tCode"></ol>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="label">How to fill a row</span></div>
+        <div class="panel-body" style="display:grid; gap:8px; font-size:0.92rem">
+          <p style="margin:0">Write values the way Python shows them: <code>7</code>, <code>7.0</code>,
+            <code>'abc'</code>, <code>[1, 2]</code>, <code>True</code>.</p>
+          <p style="margin:0">Leave a cell empty if the variable does not exist yet. Leave <em>printed</em> empty if
+            the line prints nothing.</p>
+          <p style="margin:0">Press <strong>Enter</strong> to check a row. After two wrong tries you can reveal it.</p>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="label">Your trace table</span><span class="stepcount" id="tProgress"></span></div>
+      <div class="table-wrap" id="tWrap" style="max-height:none"><table class="trace" id="tTable"></table></div>
+      <div class="controls" id="tControls">
+        <button class="btn primary" id="tCheck">Check row</button>
+        <button class="btn" id="tReveal" hidden>Reveal this row</button>
+        <span class="grow"></span>
+      </div>
+      <div style="padding: 0 14px 14px"><p class="msg" id="tMsg" hidden></p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== LINE PUZZLES ===================== -->
+<section id="view-puzzles" role="tabpanel" aria-labelledby="tab-puzzles" hidden>
+  <div style="display:grid; gap:16px">
+    <p class="intro">All the lines you need are here, shuffled. Put them <strong>in order</strong> and give them the
+      right <strong>indentation</strong>. Careful: <strong>one line is a trap</strong> and does not belong.</p>
+    <div class="pz-top">
+      <span class="chip" id="pzProgress">Solved: 0 / 30</span>
+      <div class="progress" aria-hidden="true"><span id="pzBar"></span></div>
+      <span class="reset" data-reset></span>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span class="label">Choose a puzzle</span><span class="stepcount">7 sections, from easier to harder. A green number is solved.</span></div>
+      <div class="panel-body pz-sections" id="pzPick" role="group" aria-label="Choose a puzzle"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-body task" id="pzTask"></div>
+    </div>
+    <div class="board">
+      <div class="panel">
+        <div class="panel-head"><span class="label">Lines</span><span class="stepcount">click to add at the end, or drag into place</span></div>
+        <ul class="pool" id="pzPool"></ul>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="label">Your program</span><span class="stepcount">drag up/down to move, left/right to indent, back to the pool to remove</span></div>
+        <ol class="program" id="pzProgram"></ol>
+        <div class="controls">
+          <button class="btn primary" id="pzCheck">Check</button>
+          <button class="btn" id="pzWatch">Watch it run</button>
+          <button class="btn" id="pzClear">Start again</button>
+        </div>
+        <div style="padding: 0 14px 14px; display:grid; gap:8px" id="pzFeedback"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<p class="site-foot">Designed and edited by <a href="https://fredblain.github.io">Frédéric Blain</a>, with drafting assistance from Claude (Anthropic).
+  Content licensed under CC BY 4.0, code under the MIT License (see <code>LICENSE</code> and <code>LICENSE-CODE</code>).</p>
+</main>
+
+<script>
+"use strict";
+// =====================================================================
+// === INTERPRETER START: a small Python subset, traced line by line ===
+// =====================================================================
+const STEP_LIMIT = 300;
+
+class PyError extends Error { constructor(kind, msg, line) { super(msg); this.kind = kind; this.line = line; } }
+class StepLimit extends Error {}
+class PyFloat { constructor(v) { this.v = v; } }
+class PyRange {
+  constructor(start, stop, step) { this.start = start; this.stop = stop; this.step = step; }
+  get length() {
+    const { start, stop, step } = this;
+    return step > 0 ? Math.max(0, Math.ceil((stop - start) / step)) : Math.max(0, Math.ceil((start - stop) / -step));
+  }
+  at(i) { return this.start + i * this.step; }
+}
+class Builtin { constructor(name, fn) { this.name = name; this.fn = fn; } }
+class Method { constructor(name, fn) { this.name = name; this.fn = fn; } }
+const BREAK = { signal: "break" }, CONTINUE = { signal: "continue" };
+const err = (kind, msg) => new PyError(kind, msg, null);
+
+const KEYWORDS = new Set(["if", "elif", "else", "for", "in", "while", "break", "continue", "pass", "and", "or",
+  "not", "True", "False", "None", "def", "return", "is", "import", "from", "class", "lambda", "with", "try",
+  "except", "global", "del", "yield", "assert", "raise", "finally", "nonlocal", "as"]);
+
+function tokenize(src) {
+  const lines = src.replace(/\r/g, "").replace(/\t/g, "    ").split("\n");
+  const toks = [], indents = [0];
+  let depth = 0, lastLine = 1;
+  for (let ln = 0; ln < lines.length; ln++) {
+    const raw = lines[ln], line = ln + 1;
+    let i = 0;
+    if (depth === 0) {
+      const t = raw.trim();
+      if (t === "" || t[0] === "#") continue;
+      const ind = raw.length - raw.trimStart().length;
+      const top = indents[indents.length - 1];
+      if (ind > top) { indents.push(ind); toks.push({ t: "INDENT", line }); }
+      else if (ind < top) {
+        while (ind < indents[indents.length - 1]) { indents.pop(); toks.push({ t: "DEDENT", line }); }
+        if (ind !== indents[indents.length - 1])
+          throw new PyError("IndentationError", "this line is indented by a different amount than the lines around it", line);
+      }
+      i = ind;
+    }
+    while (i < raw.length) {
+      const c = raw[i];
+      if (c === " ") { i++; continue; }
+      if (c === "#") break;
+      const rest = raw.slice(i);
+      let m;
+      if ((m = /^(\d+\.\d*|\.\d+|\d+)/.exec(rest))) {
+        toks.push({ t: "NUM", v: m[0].includes(".") ? new PyFloat(parseFloat(m[0])) : parseInt(m[0], 10), line });
+        i += m[0].length; continue;
+      }
+      if ((m = /^[A-Za-z_]\w*/.exec(rest))) {
+        toks.push({ t: KEYWORDS.has(m[0]) ? "KW" : "NAME", v: m[0], line });
+        i += m[0].length; continue;
+      }
+      if (c === '"' || c === "'") {
+        let j = i + 1, s = "";
+        while (j < raw.length && raw[j] !== c) {
+          if (raw[j] === "\\" && j + 1 < raw.length) {
+            const e = raw[j + 1];
+            s += e === "n" ? "\n" : e === "t" ? "\t" : e;
+            j += 2;
+          } else { s += raw[j]; j++; }
+        }
+        if (j >= raw.length) throw new PyError("SyntaxError", "this string is never closed: a quote is missing", line);
+        toks.push({ t: "STR", v: s, line }); i = j + 1; continue;
+      }
+      const three = rest.slice(0, 3), two = rest.slice(0, 2);
+      if (three === "//=" || three === "**=") { toks.push({ t: "OP", v: three, line }); i += 3; continue; }
+      if (["**", "//", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%="].includes(two)) {
+        toks.push({ t: "OP", v: two, line }); i += 2; continue;
+      }
+      if ("+-*/%<>=()[],:.".includes(c)) {
+        if (c === "(" || c === "[") depth++;
+        if (c === ")" || c === "]") depth = Math.max(0, depth - 1);
+        toks.push({ t: "OP", v: c, line }); i++; continue;
+      }
+      throw new PyError("SyntaxError", `Python does not understand the character ${c}`, line);
+    }
+    lastLine = line;
+    if (depth === 0) toks.push({ t: "NEWLINE", line });
+  }
+  if (depth > 0) throw new PyError("SyntaxError", "a bracket ( or [ is opened but never closed", lastLine);
+  while (indents.length > 1) { indents.pop(); toks.push({ t: "DEDENT", line: lastLine }); }
+  toks.push({ t: "EOF", line: lastLine });
+  return toks;
+}
+
+function describe(k) {
+  if (k.t === "NEWLINE") return "the end of the line";
+  if (k.t === "EOF") return "the end of the program";
+  if (k.t === "INDENT" || k.t === "DEDENT") return "a change of indentation";
+  if (k.t === "STR") return "a string";
+  if (k.t === "NUM") return "a number";
+  return `'${k.v}'`;
+}
+
+class Parser {
+  constructor(toks) { this.toks = toks; this.p = 0; this.loops = 0; this.kinds = {}; }
+  get cur() { return this.toks[this.p]; }
+  is(t, v) { const k = this.cur; return k.t === t && (v === undefined || k.v === v); }
+  take(t, v) { return this.is(t, v) ? this.toks[this.p++] : null; }
+  need(t, v, msg) {
+    if (this.is(t, v)) return this.toks[this.p++];
+    throw new PyError("SyntaxError", msg, this.cur.line);
+  }
+  program() {
+    const body = [];
+    while (!this.is("EOF")) { if (this.take("NEWLINE")) continue; body.push(this.stmt()); }
+    return body;
+  }
+  block(header) {
+    if (this.is("OP", "=")) throw new PyError("SyntaxError", "to compare two values use == (a single = gives a variable a value)", this.cur.line);
+    this.need("OP", ":", `a ':' is missing at the end of the ${header} line`);
+    this.need("NEWLINE", undefined, `after '${header} ...:' the body goes on the next lines, indented`);
+    if (!this.is("INDENT")) throw new PyError("IndentationError", `the body of this ${header} must be indented (4 spaces)`, this.cur.line);
+    this.p++;
+    const body = [];
+    while (!this.is("DEDENT") && !this.is("EOF")) { if (this.take("NEWLINE")) continue; body.push(this.stmt()); }
+    this.take("DEDENT");
+    return body;
+  }
+  stmt() {
+    const k = this.cur, line = k.line;
+    if (k.t === "INDENT") throw new PyError("IndentationError", "unexpected indent: this line is indented, but no for, while or if above it asks for that", line);
+    if (k.t === "KW") {
+      switch (k.v) {
+        case "if": {
+          this.p++;
+          const branches = [{ test: this.expr(), body: this.block("if"), line }];
+          let orelse = null;
+          while (this.is("KW", "elif")) {
+            const l = this.cur.line; this.p++;
+            this.kinds[l] = "if";
+            branches.push({ test: this.expr(), body: this.block("elif"), line: l });
+          }
+          if (this.is("KW", "else")) { this.p++; orelse = this.block("else"); }
+          this.kinds[line] = "if";
+          return { type: "if", line, branches, orelse };
+        }
+        case "for": {
+          this.p++;
+          const name = this.need("NAME", undefined, "after for comes a variable name, as in: for x in ...");
+          this.need("KW", "in", "a for loop needs 'in', as in: for x in ...");
+          const iter = this.expr();
+          this.loops++; const body = this.block("for"); this.loops--;
+          this.kinds[line] = "for";
+          return { type: "for", line, target: name.v, iter, body };
+        }
+        case "while": {
+          this.p++;
+          const test = this.expr();
+          this.loops++; const body = this.block("while"); this.loops--;
+          this.kinds[line] = "while";
+          return { type: "while", line, test, body };
+        }
+        case "break": case "continue":
+          this.p++;
+          if (this.loops === 0) throw new PyError("SyntaxError", `'${k.v}' can only be used inside a loop`, line);
+          this.endLine(); this.kinds[line] = k.v;
+          return { type: k.v, line };
+        case "pass": this.p++; this.endLine(); return { type: "pass", line };
+        case "else": case "elif":
+          throw new PyError("SyntaxError", `this '${k.v}' has no matching 'if' above it. It must be indented exactly like its if.`, line);
+        case "def": case "return":
+          throw new PyError("SyntaxError", "Loop Lab runs plain code only: functions (def and return) are not supported here", line);
+      }
+    }
+    const e = this.expr();
+    if (this.is("OP", "=")) {
+      this.p++; this.checkTarget(e, line);
+      const value = this.expr(); this.endLine();
+      this.kinds[line] = "assign";
+      return { type: "assign", line, target: e, value };
+    }
+    const aug = ["+=", "-=", "*=", "/=", "//=", "%=", "**="].find(o => this.is("OP", o));
+    if (aug) {
+      this.p++; this.checkTarget(e, line);
+      const value = this.expr(); this.endLine();
+      this.kinds[line] = "assign";
+      return { type: "aug", line, op: aug.slice(0, -1), target: e, value };
+    }
+    this.endLine();
+    this.kinds[line] = "expr";
+    return { type: "expr", line, expr: e };
+  }
+  endLine() {
+    if (this.take("NEWLINE") || this.is("EOF")) return;
+    if (this.is("OP", ":")) throw new PyError("SyntaxError", "unexpected ':'. Only lines starting with for, while, if, elif or else end with a colon", this.cur.line);
+    throw new PyError("SyntaxError", `Python didn't expect ${describe(this.cur)} here`, this.cur.line);
+  }
+  checkTarget(e, line) {
+    if (e.type !== "name" && e.type !== "index")
+      throw new PyError("SyntaxError", "you can only give a value to a variable (x = ...) or a list position (x[i] = ...)", line);
+  }
+  expr() { return this.or(); }
+  or() { let l = this.and(); while (this.take("KW", "or")) l = { type: "bool", op: "or", l, r: this.and() }; return l; }
+  and() { let l = this.not(); while (this.take("KW", "and")) l = { type: "bool", op: "and", l, r: this.not() }; return l; }
+  not() { if (this.take("KW", "not")) return { type: "not", e: this.not() }; return this.cmp(); }
+  cmp() {
+    const first = this.arith(), ops = [], rest = [];
+    for (;;) {
+      let op = null;
+      if (this.cur.t === "OP" && ["<", ">", "<=", ">=", "==", "!="].includes(this.cur.v)) { op = this.cur.v; this.p++; }
+      else if (this.is("KW", "in")) { op = "in"; this.p++; }
+      else if (this.is("KW", "not") && this.toks[this.p + 1].t === "KW" && this.toks[this.p + 1].v === "in") { op = "not in"; this.p += 2; }
+      else break;
+      ops.push(op); rest.push(this.arith());
+    }
+    return ops.length ? { type: "cmp", first, ops, rest } : first;
+  }
+  arith() {
+    let l = this.term();
+    while (this.cur.t === "OP" && (this.cur.v === "+" || this.cur.v === "-")) {
+      const op = this.toks[this.p++].v; l = { type: "bin", op, l, r: this.term() };
+    }
+    return l;
+  }
+  term() {
+    let l = this.unary();
+    while (this.cur.t === "OP" && ["*", "/", "//", "%"].includes(this.cur.v)) {
+      const op = this.toks[this.p++].v; l = { type: "bin", op, l, r: this.unary() };
+    }
+    return l;
+  }
+  unary() {
+    if (this.take("OP", "-")) return { type: "neg", e: this.unary() };
+    if (this.take("OP", "+")) return this.unary();
+    return this.power();
+  }
+  power() {
+    const b = this.postfix();
+    if (this.take("OP", "**")) return { type: "bin", op: "**", l: b, r: this.unary() };
+    return b;
+  }
+  postfix() {
+    let e = this.atom();
+    for (;;) {
+      if (this.take("OP", "(")) {
+        const args = [], kwargs = {};
+        while (!this.is("OP", ")")) {
+          const nx = this.toks[this.p + 1];
+          if (this.cur.t === "NAME" && nx.t === "OP" && nx.v === "=") {
+            const n = this.cur.v; this.p += 2; kwargs[n] = this.expr();
+          } else args.push(this.expr());
+          if (!this.take("OP", ",")) break;
+        }
+        this.need("OP", ")", "a ')' is missing");
+        e = { type: "call", fn: e, args, kwargs };
+      } else if (this.take("OP", "[")) {
+        const idx = this.expr();
+        if (this.is("OP", ":")) throw new PyError("SyntaxError", "slices like a[1:3] are not supported in Loop Lab", this.cur.line);
+        this.need("OP", "]", "a ']' is missing");
+        e = { type: "index", obj: e, idx };
+      } else if (this.take("OP", ".")) {
+        const n = this.need("NAME", undefined, "a method name is missing after the dot");
+        e = { type: "attr", obj: e, name: n.v };
+      } else return e;
+    }
+  }
+  atom() {
+    const k = this.cur;
+    if (k.t === "NUM") { this.p++; return { type: "const", v: k.v }; }
+    if (k.t === "STR") { this.p++; let s = k.v; while (this.cur.t === "STR") { s += this.cur.v; this.p++; } return { type: "const", v: s }; }
+    if (k.t === "NAME") { this.p++; return { type: "name", name: k.v }; }
+    if (k.t === "KW" && (k.v === "True" || k.v === "False" || k.v === "None")) {
+      this.p++; return { type: "const", v: k.v === "True" ? true : k.v === "False" ? false : null };
+    }
+    if (this.take("OP", "(")) { const e = this.expr(); this.need("OP", ")", "a ')' is missing"); return e; }
+    if (this.take("OP", "[")) {
+      const items = [];
+      while (!this.is("OP", "]")) { items.push(this.expr()); if (!this.take("OP", ",")) break; }
+      this.need("OP", "]", "a ']' is missing");
+      return { type: "list", items };
+    }
+    throw new PyError("SyntaxError", `Python didn't expect ${describe(k)} here`, k.line);
+  }
+}
+
+// ---- values ----
+const isNumLike = x => typeof x === "number" || x instanceof PyFloat || typeof x === "boolean";
+const num = x => x instanceof PyFloat ? x.v : x === true ? 1 : x === false ? 0 : x;
+const mk = (v, isFloat) => isFloat ? new PyFloat(v) : v;
+function typeName(x) {
+  if (x === null) return "NoneType";
+  if (typeof x === "boolean") return "bool";
+  if (typeof x === "number") return "int";
+  if (x instanceof PyFloat) return "float";
+  if (typeof x === "string") return "str";
+  if (Array.isArray(x)) return "list";
+  if (x instanceof PyRange) return "range";
+  return "function";
+}
+function floatRepr(v) {
+  if (Number.isNaN(v)) return "nan";
+  if (!isFinite(v)) return v > 0 ? "inf" : "-inf";
+  if (Number.isInteger(v) && Math.abs(v) < 1e16) return v.toFixed(1);
+  return String(v);
+}
+function repr(x, depth = 0) {
+  if (x === null) return "None";
+  if (x === true) return "True";
+  if (x === false) return "False";
+  if (typeof x === "number") return String(x);
+  if (x instanceof PyFloat) return floatRepr(x.v);
+  if (typeof x === "string") {
+    const q = x.includes("'") && !x.includes('"') ? '"' : "'";
+    return q + x.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\t/g, "\\t").split(q).join("\\" + q) + q;
+  }
+  if (Array.isArray(x)) return depth > 3 ? "[...]" : "[" + x.map(v => repr(v, depth + 1)).join(", ") + "]";
+  if (x instanceof PyRange) return x.step === 1 ? `range(${x.start}, ${x.stop})` : `range(${x.start}, ${x.stop}, ${x.step})`;
+  if (x instanceof Builtin) return `<built-in function ${x.name}>`;
+  if (x instanceof Method) return `<built-in method ${x.name}>`;
+  return String(x);
+}
+const pyStr = x => typeof x === "string" ? x : repr(x);
+function truthy(x) {
+  if (x === null || x === false) return false;
+  if (typeof x === "number") return x !== 0;
+  if (x instanceof PyFloat) return x.v !== 0;
+  if (typeof x === "string" || Array.isArray(x)) return x.length > 0;
+  if (x instanceof PyRange) return x.length > 0;
+  return true;
+}
+function eq(a, b) {
+  if (isNumLike(a) && isNumLike(b)) return num(a) === num(b);
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => eq(v, b[i]));
+  return a === b;
+}
+function compare(op, a, b) {
+  if (op === "==") return eq(a, b);
+  if (op === "!=") return !eq(a, b);
+  if (op === "in" || op === "not in") { const r = contains(b, a); return op === "in" ? r : !r; }
+  const bothNum = isNumLike(a) && isNumLike(b);
+  const bothStr = typeof a === "string" && typeof b === "string";
+  const bothList = Array.isArray(a) && Array.isArray(b);
+  if (!bothNum && !bothStr && !bothList)
+    throw err("TypeError", `'${op}' not supported between instances of '${typeName(a)}' and '${typeName(b)}'`);
+  const lt = (x, y) => {
+    if (Array.isArray(x)) {
+      for (let i = 0; i < Math.min(x.length, y.length); i++) if (!eq(x[i], y[i])) return compare("<", x[i], y[i]);
+      return x.length < y.length;
+    }
+    return isNumLike(x) ? num(x) < num(y) : x < y;
+  };
+  switch (op) {
+    case "<": return lt(a, b);
+    case ">": return lt(b, a);
+    case "<=": return !lt(b, a);
+    case ">=": return !lt(a, b);
+  }
+}
+function contains(container, item) {
+  if (Array.isArray(container)) return container.some(v => eq(v, item));
+  if (typeof container === "string") {
+    if (typeof item !== "string") throw err("TypeError", `'in <string>' requires string as left operand, not ${typeName(item)}`);
+    return container.includes(item);
+  }
+  if (container instanceof PyRange) {
+    if (typeof item !== "number") return false;
+    for (let i = 0; i < container.length; i++) if (container.at(i) === item) return true;
+    return false;
+  }
+  throw err("TypeError", `argument of type '${typeName(container)}' is not iterable`);
+}
+function binop(op, a, b) {
+  if (isNumLike(a) && isNumLike(b)) {
+    const x = num(a), y = num(b), f = a instanceof PyFloat || b instanceof PyFloat;
+    switch (op) {
+      case "+": return mk(x + y, f);
+      case "-": return mk(x - y, f);
+      case "*": return mk(x * y, f);
+      case "/": if (y === 0) throw err("ZeroDivisionError", "division by zero"); return new PyFloat(x / y);
+      case "//": if (y === 0) throw err("ZeroDivisionError", "integer division or modulo by zero"); return mk(Math.floor(x / y), f);
+      case "%": if (y === 0) throw err("ZeroDivisionError", "integer division or modulo by zero"); return mk(x - y * Math.floor(x / y), f);
+      case "**": return mk(Math.pow(x, y), f || y < 0);
+    }
+  }
+  if (op === "+") {
+    if (typeof a === "string" && typeof b === "string") return a + b;
+    if (Array.isArray(a) && Array.isArray(b)) return a.concat(b);
+    if (typeof a === "string") throw err("TypeError", `can only concatenate str (not "${typeName(b)}") to str`);
+    if (Array.isArray(a)) throw err("TypeError", `can only concatenate list (not "${typeName(b)}") to list`);
+  }
+  if (op === "*") {
+    const rep = (s, n) => {
+      if (n * s.length > 100000) throw err("MemoryError", "that would be too big for Loop Lab");
+      return typeof s === "string" ? s.repeat(Math.max(0, n)) : [].concat(...Array(Math.max(0, n)).fill(s));
+    };
+    if ((typeof a === "string" || Array.isArray(a)) && typeof b === "number") return rep(a, b);
+    if ((typeof b === "string" || Array.isArray(b)) && typeof a === "number") return rep(b, a);
+  }
+  throw err("TypeError", `unsupported operand type(s) for ${op}: '${typeName(a)}' and '${typeName(b)}'`);
+}
+function makeIter(x) {
+  let i = 0;
+  if (Array.isArray(x) || typeof x === "string") return () => i < x.length ? { v: x[i++] } : null;
+  if (x instanceof PyRange) { const n = x.length; return () => i < n ? { v: x.at(i++) } : null; }
+  throw err("TypeError", `'${typeName(x)}' object is not iterable`);
+}
+function iterList(x) {
+  if (x instanceof PyRange && x.length > 100000) throw err("MemoryError", "that range is too big for Loop Lab");
+  const next = makeIter(x), r = [];
+  let n;
+  while ((n = next())) r.push(n.v);
+  return r;
+}
+function position(seq, i, what) {
+  if (typeof i !== "number") throw err("TypeError", `${what} indices must be integers, not ${typeName(i)}`);
+  const len = seq.length, j = i < 0 ? len + i : i;
+  if (j < 0 || j >= len) throw err("IndexError", `${what} index out of range`);
+  return j;
+}
+function getItem(o, i) {
+  if (Array.isArray(o)) return o[position(o, i, "list")];
+  if (typeof o === "string") return o[position(o, i, "string")];
+  if (o instanceof PyRange) return o.at(position(o, i, "range"));
+  throw err("TypeError", `'${typeName(o)}' object is not subscriptable`);
+}
+function argc(a, n, name) {
+  if (a.length !== n) throw err("TypeError", `${name}() takes ${n} argument${n === 1 ? "" : "s"} (${a.length} given)`);
+}
+function getAttr(o, name) {
+  const M = fn => new Method(name, fn);
+  if (Array.isArray(o)) {
+    if (name === "append") return M(a => { argc(a, 1, "append"); o.push(a[0]); return null; });
+    if (name === "pop") return M(a => {
+      if (o.length === 0) throw err("IndexError", "pop from empty list");
+      return a.length ? o.splice(position(o, a[0], "pop"), 1)[0] : o.pop();
+    });
+    if (name === "count") return M(a => { argc(a, 1, "count"); return o.filter(v => eq(v, a[0])).length; });
+  }
+  if (typeof o === "string") {
+    if (name === "lower") return M(() => o.toLowerCase());
+    if (name === "upper") return M(() => o.toUpperCase());
+    if (name === "strip") return M(() => o.trim());
+    if (name === "isdigit") return M(() => /^\d+$/.test(o));
+    if (name === "split") return M(a => a.length ? o.split(a[0]) : o.trim().split(/\s+/).filter(Boolean));
+    if (name === "join") return M(a => {
+      argc(a, 1, "join");
+      const items = iterList(a[0]);
+      items.forEach(v => { if (typeof v !== "string") throw err("TypeError", `join() needs strings, found ${typeName(v)}`); });
+      return items.join(o);
+    });
+    if (name === "count") return M(a => { argc(a, 1, "count"); return a[0] === "" ? o.length + 1 : o.split(a[0]).length - 1; });
+  }
+  throw err("AttributeError", `'${typeName(o)}' object has no attribute '${name}'`);
+}
+
+function parse(src) {
+  const parser = new Parser(tokenize(src));
+  const ast = parser.program();
+  return { ast, kinds: parser.kinds };
+}
+
+// Runs src. Returns { rows, out, error, kinds }.
+// Each row = one line Python ran, with the variables AFTER it and what it printed.
+function run(src, opts = {}) {
+  const env = opts.env || new Map();
+  const record = opts.record !== false;
+  const rows = [];
+  let out = "", mark = 0, pending = null, steps = 0, parsed;
+  try { parsed = parse(src); }
+  catch (e) {
+    if (!(e instanceof PyError)) throw e;
+    return { rows, out, kinds: {}, env, parseError: true, error: { kind: e.kind, msg: e.message, line: e.line } };
+  }
+
+  const snap = () => {
+    const vars = [];
+    for (const [name, v] of env) vars.push({ name, repr: repr(v), type: typeName(v), items: Array.isArray(v) ? v.map(x => repr(x)) : null });
+    return vars;
+  };
+  function finalize(extra) {
+    if (pending === null) return;
+    if (record) rows.push(Object.assign({ line: pending, vars: snap(), out: out.slice(mark) }, extra || {}));
+    mark = out.length; pending = null;
+  }
+  function lineEvent(line) {
+    finalize();
+    if (++steps > STEP_LIMIT) throw new StepLimit();
+    pending = line;
+  }
+
+  const B = {
+    print: (a, kw) => {
+      const sep = kw.sep !== undefined ? pyStr(kw.sep) : " ";
+      const end = kw.end !== undefined ? pyStr(kw.end) : "\n";
+      out += a.map(pyStr).join(sep) + end;
+      return null;
+    },
+    range: a => {
+      if (a.length < 1 || a.length > 3) throw err("TypeError", `range expected 1 to 3 arguments, got ${a.length}`);
+      a.forEach(v => { if (typeof v !== "number") throw err("TypeError", `'${typeName(v)}' object cannot be interpreted as an integer`); });
+      const [s, e, st] = a.length === 1 ? [0, a[0], 1] : [a[0], a[1], a.length === 3 ? a[2] : 1];
+      if (st === 0) throw err("ValueError", "range() arg 3 must not be zero");
+      return new PyRange(s, e, st);
+    },
+    len: a => {
+      argc(a, 1, "len");
+      const x = a[0];
+      if (typeof x === "string" || Array.isArray(x) || x instanceof PyRange) return x.length;
+      throw err("TypeError", `object of type '${typeName(x)}' has no len()`);
+    },
+    str: a => a.length ? pyStr(a[0]) : "",
+    int: a => {
+      const x = a[0];
+      if (typeof x === "number") return x;
+      if (typeof x === "boolean") return x ? 1 : 0;
+      if (x instanceof PyFloat) return Math.trunc(x.v);
+      if (typeof x === "string" && /^\s*[-+]?\d+\s*$/.test(x)) return parseInt(x, 10);
+      throw err("ValueError", `invalid literal for int(): ${repr(x)}`);
+    },
+    float: a => {
+      const x = a[0];
+      if (isNumLike(x)) return new PyFloat(num(x));
+      if (typeof x === "string" && x.trim() !== "" && !isNaN(Number(x))) return new PyFloat(Number(x));
+      throw err("ValueError", `could not convert string to float: ${repr(x)}`);
+    },
+    abs: a => { const x = a[0]; if (!isNumLike(x)) throw err("TypeError", `bad operand type for abs(): '${typeName(x)}'`); return mk(Math.abs(num(x)), x instanceof PyFloat); },
+    bool: a => a.length ? truthy(a[0]) : false,
+    list: a => a.length ? iterList(a[0]) : [],
+    sum: a => { let t = 0; for (const v of iterList(a[0])) t = binop("+", t, v); return t; },
+    min: a => best(a, "<", "min"),
+    max: a => best(a, ">", "max"),
+    input: () => { throw err("NotSupported", "input() does not work in Loop Lab. Give the variable a value directly, e.g. n = 5"); },
+  };
+  function best(a, op, name) {
+    const items = a.length === 1 ? iterList(a[0]) : a;
+    if (!items.length) throw err("ValueError", `${name}() arg is an empty sequence`);
+    let b = items[0];
+    for (const v of items) if (compare(op, v, b)) b = v;
+    return b;
+  }
+  const BUILTINS = {};
+  for (const k in B) BUILTINS[k] = new Builtin(k, B[k]);
+
+  function ev(e) {
+    switch (e.type) {
+      case "const": return e.v;
+      case "name":
+        if (env.has(e.name)) return env.get(e.name);
+        if (BUILTINS[e.name]) return BUILTINS[e.name];
+        throw err("NameError", `name '${e.name}' is not defined`);
+      case "list": return e.items.map(ev);
+      case "neg": {
+        const v = ev(e.e);
+        if (!isNumLike(v)) throw err("TypeError", `bad operand type for unary -: '${typeName(v)}'`);
+        return mk(-num(v), v instanceof PyFloat);
+      }
+      case "not": return !truthy(ev(e.e));
+      case "bool": { const l = ev(e.l); if (e.op === "and") return truthy(l) ? ev(e.r) : l; return truthy(l) ? l : ev(e.r); }
+      case "bin": return binop(e.op, ev(e.l), ev(e.r));
+      case "cmp": {
+        let left = ev(e.first);
+        for (let i = 0; i < e.ops.length; i++) {
+          const right = ev(e.rest[i]);
+          if (!compare(e.ops[i], left, right)) return false;
+          left = right;
+        }
+        return true;
+      }
+      case "index": return getItem(ev(e.obj), ev(e.idx));
+      case "attr": return getAttr(ev(e.obj), e.name);
+      case "call": {
+        const f = ev(e.fn), args = e.args.map(ev), kw = {};
+        for (const k in e.kwargs) kw[k] = ev(e.kwargs[k]);
+        if (f instanceof Builtin || f instanceof Method) return f.fn(args, kw);
+        throw err("TypeError", `'${typeName(f)}' object is not callable`);
+      }
+    }
+  }
+  function assign(t, v) {
+    if (t.type === "name") { env.set(t.name, v); return; }
+    const o = ev(t.obj), i = ev(t.idx);
+    if (Array.isArray(o)) { o[position(o, i, "list assignment")] = v; return; }
+    if (typeof o === "string") throw err("TypeError", "'str' object does not support item assignment");
+    throw err("TypeError", `'${typeName(o)}' object does not support item assignment`);
+  }
+  function exec(body) { for (const s of body) execS(s); }
+  function loopBody(body) {
+    try { exec(body); }
+    catch (x) { if (x === BREAK) return false; if (x !== CONTINUE) throw x; }
+    return true;
+  }
+  function execS(s) {
+    lineEvent(s.line);
+    switch (s.type) {
+      case "expr": ev(s.expr); return;
+      case "assign": assign(s.target, ev(s.value)); return;
+      case "aug": {
+        const cur = ev(s.target), val = ev(s.value);
+        if (s.op === "+" && Array.isArray(cur)) { for (const v of iterList(val)) cur.push(v); assign(s.target, cur); }
+        else assign(s.target, binop(s.op, cur, val));
+        return;
+      }
+      case "pass": return;
+      case "break": throw BREAK;
+      case "continue": throw CONTINUE;
+      case "if":
+        for (let i = 0; i < s.branches.length; i++) {
+          const b = s.branches[i];
+          if (i > 0) lineEvent(b.line);
+          if (truthy(ev(b.test))) { exec(b.body); return; }
+        }
+        if (s.orelse) exec(s.orelse);
+        return;
+      case "for": {
+        const next = makeIter(ev(s.iter));
+        for (;;) {
+          const n = next();
+          if (!n) return;
+          env.set(s.target, n.v);
+          if (!loopBody(s.body)) return;
+          lineEvent(s.line);
+        }
+      }
+      case "while":
+        for (;;) {
+          if (!truthy(ev(s.test))) return;
+          if (!loopBody(s.body)) return;
+          lineEvent(s.line);
+        }
+    }
+  }
+
+  let error = null;
+  try { exec(parsed.ast); finalize(); }
+  catch (e) {
+    if (e instanceof StepLimit) error = { kind: "Stopped", msg: `the program was still running after ${STEP_LIMIT} steps`, line: null, limit: true };
+    else if (e instanceof PyError) error = { kind: e.kind, msg: e.message, line: e.line != null ? e.line : pending };
+    else if (e instanceof RangeError) error = { kind: "RecursionError", msg: "the program went too deep", line: pending };
+    else throw e;
+    if (pending !== null) finalize({ error });
+    else if (rows.length) rows[rows.length - 1].error = error;
+    if (error.line == null && rows.length) error.line = rows[rows.length - 1].line;
+  }
+  return { rows, out, error, kinds: parsed.kinds, env };
+}
+// === INTERPRETER END ===
+
+// =====================================================================
+// Content
+// =====================================================================
+const L = (...lines) => lines.join("\n");
+const PRESETS = [
+  { group: "Start here", id: "sum", title: "Add up a list",
+    code: L("numbers = [3, 5, 2]", "total = 0", "for n in numbers:", "    total = total + n", "print(total)"),
+    note: "Accumulator. total remembers the running sum from one round to the next. At every for line, n takes the next number from the list." },
+  { group: "Start here", id: "range", title: "What does range(4) give?",
+    code: L("for i in range(4):", "    print(i)"),
+    note: "Before you step: what is the first value of i, and what is the last?" },
+  { group: "Start here", id: "inside", title: "print inside the loop",
+    code: L("total = 0", "for n in [2, 4, 6]:", "    total = total + n", "    print(total)"),
+    note: "The print is indented, so it is part of the loop body. How many times will it run?" },
+  { group: "Start here", id: "after", title: "print after the loop",
+    code: L("total = 0", "for n in [2, 4, 6]:", "    total = total + n", "print(total)"),
+    note: "The same loop, but this print is not indented. When does it run now?" },
+  { group: "for loops", id: "letters", title: "Loop over a string",
+    code: L('word = "loop"', "for letter in word:", "    print(letter * 2)"),
+    note: "Looping over a string gives you one character per round." },
+  { group: "for loops", id: "counter", title: "Count the positive numbers",
+    code: L("count = 0", "for x in [5, -1, 3, 0, -7]:", "    if x > 0:", "        count = count + 1", "print(count)"),
+    note: "Counter. count only goes up when the if condition is True. Is 0 greater than 0?" },
+  { group: "for loops", id: "best", title: "Biggest number so far",
+    code: L("numbers = [4, 9, 2, 11, 5]", "best = numbers[0]", "for n in numbers:", "    if n > best:", "        best = n", "print(best)"),
+    note: "Best so far. best starts at the first number of the list, not at 0. It only changes when a bigger number shows up." },
+  { group: "for loops", id: "search", title: "Find the first negative",
+    code: L("numbers = [4, 7, -2, 5, -9]", "position = -1", "for i in range(len(numbers)):", "    if numbers[i] < 0:", "        position = i", "        break", "print(position)"),
+    note: "Search. i is a position; numbers[i] is the value at that position. break leaves the loop straight away, so -9 is never looked at." },
+  { group: "for loops", id: "loopvar", title: "Changing the loop variable",
+    code: L("for i in range(3):", "    i = 10", "    print(i)"),
+    note: "The body sets i to 10. Does that change the value i gets in the next round?" },
+  { group: "for loops", id: "empty", title: "An empty range",
+    code: L("for i in range(5, 0):", "    print(i)", 'print("done")'),
+    note: "range(5, 0) counts UP from 5 and stops before 0. How many rounds is that?" },
+  { group: "for loops", id: "nested", title: "A loop inside a loop",
+    code: L("for row in range(3):", "    for col in range(2):", "        print(row, col)"),
+    note: "The inner loop runs completely, from start to end, for every single round of the outer loop." },
+  { group: "while loops", id: "countdown", title: "Countdown",
+    code: L("n = 3", "while n > 0:", "    print(n)", "    n = n - 1", 'print("lift-off!")'),
+    note: "Every while loop has three parts: INIT (n = 3), CONDITION (n > 0) and UPDATE (n = n - 1)." },
+  { group: "while loops", id: "doubling", title: "Doubling until 20",
+    code: L("x = 1", "while x < 20:", "    x = x * 2", "    print(x)"),
+    note: "The condition is only checked at the top of each round. Look closely at the last value printed." },
+  { group: "while loops", id: "digits", title: "Count the digits",
+    code: L("n = 4096", "digits = 0", "while n > 0:", "    n = n // 10", "    digits = digits + 1", "print(digits)"),
+    note: "n // 10 removes the last digit: 4096 // 10 is 409. The loop stops when no digits are left." },
+  { group: "Spot the bug", id: "bug-reset", title: "Bug: the total keeps resetting",
+    code: L("prices = [1.5, 2.0, 3.5]", "for price in prices:", "    total = 0", "    total = total + price", "print(total)"),
+    note: "This should print 7.0. Find the first step where total is not what you expect, then press Edit code and fix it." },
+  { group: "Spot the bug", id: "bug-index", title: "Bug: value used as a position",
+    code: L("numbers = [1, 2, 3]", "total = 0", "for x in numbers:", "    total = total + numbers[x]", "print(total)"),
+    note: "This should print 6. Is x a position or a value? Watch numbers[x] closely." },
+  { group: "Spot the bug", id: "bug-forever", title: "Bug: a loop that never ends",
+    code: L("n = 3", "result = []", "while n > 0:", "    result.append(n)", "print(result)"),
+    note: "This should print [3, 2, 1]. Press Play: Loop Lab stops the program after 300 steps. Which line is missing?" },
+];
+const TRACE_IDS = ["sum", "inside", "counter", "best", "search", "loopvar", "countdown", "doubling", "nested", "digits"];
+
+// Puzzles: lines are written in SOLUTION order with their indentation (4 spaces per level).
+// The page shuffles them (always the same way for a given puzzle) and adds the trap line.
+const PUZZLE_SECTIONS = [
+  { id: "each", title: "Repeat for each item",
+    tip: "Accumulator: give the variable its start value BEFORE the loop, change it INSIDE the loop, use it AFTER the loop.",
+    puzzles: [
+      { id: "sum", title: "Add them up", task: "Print the sum of the numbers in the list.",
+        lines: ["total = 0", "for n in numbers:", "    total = total + n", "print(total)"],
+        trap: "total = total + numbers",
+        tests: [{ setup: "numbers = [3, 5, 2]", out: "10" }, { setup: "numbers = [7]", out: "7" }, { setup: "numbers = []", out: "0" }],
+        trapHint: "The trap is total = total + numbers: numbers is the whole list. Each round, add only n, the current number." },
+      { id: "average", title: "Average", task: "Print the average of the numbers in the list.",
+        lines: ["total = 0", "for n in numbers:", "    total = total + n", "print(total / len(numbers))"],
+        trap: "total = n",
+        tests: [{ setup: "numbers = [2, 4, 6]", out: "4.0" }, { setup: "numbers = [1, 2]", out: "1.5" }, { setup: "numbers = [5]", out: "5.0" }],
+        trapHint: "The trap is total = n: it throws away everything added so far." },
+      { id: "shout", title: "Shout every word", task: "Print every word in capitals, one per line, then print done.",
+        lines: ["for word in words:", "    print(word.upper())", 'print("done")'],
+        trap: "print(words.upper())",
+        tests: [{ setup: 'words = ["hi", "loop"]', out: "HI\nLOOP\ndone" }, { setup: 'words = ["a"]', out: "A\ndone" }, { setup: "words = []", out: "done" }],
+        trapHint: "The trap is words.upper(): words is a list, and only a string can be upper-cased. Use word, the current item." },
+      { id: "product", title: "Multiply them all", task: "Print the product of all the numbers (the product of no numbers is 1).",
+        lines: ["result = 1", "for n in numbers:", "    result = result * n", "print(result)"],
+        trap: "result = 0",
+        tests: [{ setup: "numbers = [2, 3, 4]", out: "24" }, { setup: "numbers = [5]", out: "5" }, { setup: "numbers = []", out: "1" }],
+        trapHint: "The trap is result = 0: zero times anything is zero. For multiplying, start at 1." },
+      { id: "reverse", title: "Backwards", task: "Print the word backwards, by building a new string letter by letter.",
+        lines: ['rev = ""', "for ch in word:", "    rev = ch + rev", "print(rev)"],
+        trap: "rev = rev + ch",
+        tests: [{ setup: 'word = "loop"', out: "pool" }, { setup: 'word = "abc"', out: "cba" }, { setup: 'word = "a"', out: "a" }],
+        trapHint: "The trap is rev = rev + ch: adding each letter at the END rebuilds the word in its original order." },
+    ] },
+  { id: "filter", title: "Count and filter",
+    tip: "Counter or filter: start at 0 (or with an empty list []) before the loop, and put the if inside the loop.",
+    puzzles: [
+      { id: "countpos", title: "Count the positives", task: "Print how many numbers are greater than 0.",
+        lines: ["count = 0", "for x in numbers:", "    if x > 0:", "        count = count + 1", "print(count)"],
+        trap: "if x >= 0:",
+        tests: [{ setup: "numbers = [5, -1, 3, 0, -7]", out: "2" }, { setup: "numbers = [-1]", out: "0" }, { setup: "numbers = [1, 2]", out: "2" }],
+        trapHint: "The trap is x >= 0: zero is not positive." },
+      { id: "vowels", title: "Count vowels", task: "Print how many vowels (a, e, i, o, u) the text has. Capital letters count too.",
+        lines: ["count = 0", "for letter in text.lower():", '    if letter in "aeiou":', "        count = count + 1", "print(count)"],
+        trap: "for letter in range(text):",
+        tests: [{ setup: 'text = "Banana"', out: "3" }, { setup: 'text = "xyz"', out: "0" }, { setup: 'text = "AEIOU"', out: "5" }],
+        trapHint: "The trap is range(text): range() needs a number. A string can be looped over directly." },
+      { id: "countchar", title: "Count a letter", task: "Print how many times letter appears in text.",
+        lines: ["count = 0", "for ch in text:", "    if ch == letter:", "        count = count + 1", "print(count)"],
+        trap: 'if ch == "letter":',
+        tests: [{ setup: 'text = "banana"\nletter = "a"', out: "3" }, { setup: 'text = "banana"\nletter = "z"', out: "0" }, { setup: 'text = ""\nletter = "a"', out: "0" }],
+        trapHint: 'The trap is "letter" in quotes: that is the 6-letter word letter, not the variable letter.' },
+      { id: "evens", title: "Keep the even numbers", task: "Print a new list with only the even numbers.",
+        lines: ["evens = []", "for n in numbers:", "    if n % 2 == 0:", "        evens.append(n)", "print(evens)"],
+        trap: "if n % 2 == 1:",
+        tests: [{ setup: "numbers = [1, 2, 3, 4]", out: "[2, 4]" }, { setup: "numbers = [7]", out: "[]" }, { setup: "numbers = [0, 6]", out: "[0, 6]" }],
+        trapHint: "The trap is n % 2 == 1: that keeps the ODD numbers. An even number leaves remainder 0 when divided by 2." },
+      { id: "longwords", title: "Keep the long words", task: "Print a new list with the words that have at least 4 letters.",
+        lines: ["long = []", "for w in words:", "    if len(w) >= 4:", "        long.append(w)", "print(long)"],
+        trap: "if len(words) >= 4:",
+        tests: [{ setup: 'words = ["a", "tree", "is", "beautiful"]', out: "['tree', 'beautiful']" }, { setup: 'words = ["cat"]', out: "[]" }, { setup: 'words = ["moon", "sun"]', out: "['moon']" }],
+        trapHint: "The trap is len(words): that is the number of words in the list, not the length of the current word w." },
+    ] },
+  { id: "best", title: "Best so far",
+    tip: "Best so far: start with the FIRST item, not with 0. Replace it only when you find something better.",
+    puzzles: [
+      { id: "biggest", title: "Biggest number", task: "Print the biggest number in the list.",
+        lines: ["best = numbers[0]", "for n in numbers:", "    if n > best:", "        best = n", "print(best)"],
+        trap: "best = 0",
+        tests: [{ setup: "numbers = [3, 9, 2]", out: "9" }, { setup: "numbers = [-5, -2, -9]", out: "-2" }, { setup: "numbers = [7]", out: "7" }],
+        trapHint: "The trap is best = 0: when every number is negative, 0 wins, but 0 is not in the list." },
+      { id: "smallest", title: "Smallest number", task: "Print the smallest number in the list.",
+        lines: ["smallest = numbers[0]", "for n in numbers:", "    if n < smallest:", "        smallest = n", "print(smallest)"],
+        trap: "if n > smallest:",
+        tests: [{ setup: "numbers = [4, 1, 7]", out: "1" }, { setup: "numbers = [-2, -8, 0]", out: "-8" }, { setup: "numbers = [3]", out: "3" }],
+        trapHint: "The trap is n > smallest: that replaces the answer with a BIGGER number." },
+      { id: "longest", title: "Longest word", task: "Print the longest word. If two words are equally long, keep the first one.",
+        lines: ["best = words[0]", "for w in words:", "    if len(w) > len(best):", "        best = w", "print(best)"],
+        trap: "if w > best:",
+        tests: [{ setup: 'words = ["cat", "giraffe", "dog"]', out: "giraffe" }, { setup: 'words = ["zebra", "hippopotamus"]', out: "hippopotamus" }, { setup: 'words = ["ab", "cd"]', out: "ab" }],
+        trapHint: "The trap is w > best: comparing two strings compares them alphabetically, not by length." },
+      { id: "maxpos", title: "Where is the biggest?", task: "Print the POSITION of the biggest number (the first one if there is a tie).",
+        lines: ["best_i = 0", "for i in range(len(numbers)):", "    if numbers[i] > numbers[best_i]:", "        best_i = i", "print(best_i)"],
+        trap: "best_i = numbers[i]",
+        tests: [{ setup: "numbers = [4, 9, 2]", out: "1" }, { setup: "numbers = [1, 2, 3]", out: "2" }, { setup: "numbers = [7]", out: "0" }],
+        trapHint: "The trap is best_i = numbers[i]: that stores the VALUE. best_i must remember the POSITION i." },
+    ] },
+  { id: "range", title: "Positions and range()",
+    tip: "range(a, b) starts at a and stops just BEFORE b. Loop over positions (i) when you need to know where an item is, or to look at its neighbour.",
+    puzzles: [
+      { id: "countup", title: "Count to n", task: "Print the numbers 1, 2, ..., n, one per line.",
+        lines: ["for i in range(1, n + 1):", "    print(i)"],
+        trap: "for i in range(1, n):",
+        tests: [{ setup: "n = 3", out: "1\n2\n3" }, { setup: "n = 1", out: "1" }],
+        trapHint: "The trap is range(1, n): range stops BEFORE its end value, so n itself would be missing." },
+      { id: "sumto", title: "1 + 2 + ... + n", task: "Print the sum of all whole numbers from 1 to n.",
+        lines: ["total = 0", "for i in range(1, n + 1):", "    total = total + i", "print(total)"],
+        trap: "for i in range(n):",
+        tests: [{ setup: "n = 5", out: "15" }, { setup: "n = 1", out: "1" }, { setup: "n = 0", out: "0" }],
+        trapHint: "The trap is range(n): it gives 0, 1, ..., n-1, so n itself is never added." },
+      { id: "everyother", title: "Every other item", task: "Print a list of the items at positions 0, 2, 4, ...",
+        lines: ["result = []", "for i in range(0, len(items), 2):", "    result.append(items[i])", "print(result)"],
+        trap: "result.append(i)",
+        tests: [{ setup: 'items = ["a", "b", "c", "d", "e"]', out: "['a', 'c', 'e']" }, { setup: "items = [1, 2]", out: "[1]" }, { setup: "items = []", out: "[]" }],
+        trapHint: "The trap is append(i): i is a position. You want the item AT that position, items[i]." },
+      { id: "sorted", title: "Is it sorted?", task: "Print True if every number is smaller than or equal to the next one, otherwise False.",
+        lines: ["ok = True", "for i in range(len(numbers) - 1):", "    if numbers[i] > numbers[i + 1]:", "        ok = False", "print(ok)"],
+        trap: "for i in range(len(numbers)):",
+        tests: [{ setup: "numbers = [1, 2, 2, 5]", out: "True" }, { setup: "numbers = [3, 1, 2]", out: "False" }, { setup: "numbers = [7]", out: "True" }],
+        trapHint: "The trap is range(len(numbers)): for the last position, numbers[i + 1] does not exist (IndexError)." },
+    ] },
+  { id: "while", title: "Repeat with while",
+    tip: "Every while loop needs three things: INIT (a start value), a CONDITION, and an UPDATE that makes the condition False one day.",
+    puzzles: [
+      { id: "countdown", title: "Countdown list", task: "Build the list [n, n-1, ..., 1] with a while loop and print it.",
+        lines: ["result = []", "while n > 0:", "    result.append(n)", "    n = n - 1", "print(result)"],
+        trap: "while n < 0:",
+        tests: [{ setup: "n = 3", out: "[3, 2, 1]" }, { setup: "n = 1", out: "[1]" }, { setup: "n = 0", out: "[]" }],
+        trapHint: "The trap is while n < 0: for n = 3 it is False straight away, so the body never runs." },
+      { id: "digits", title: "Count the digits", task: "Print how many digits the whole number n has (n is at least 1).",
+        lines: ["digits = 0", "while n > 0:", "    n = n // 10", "    digits = digits + 1", "print(digits)"],
+        trap: "n = n / 10",
+        tests: [{ setup: "n = 4096", out: "4" }, { setup: "n = 7", out: "1" }, { setup: "n = 100", out: "3" }],
+        trapHint: "The trap is n / 10: it gives a decimal (409.6, 40.96, ...) that gets smaller and smaller but never reaches 0. Use // to drop the last digit." },
+      { id: "savings", title: "Double your money", task: "100 euros grow by rate every year. Print after how many years you have at least 200 euros.",
+        lines: ["money = 100", "years = 0", "while money < 200:", "    money = money * (1 + rate)", "    years = years + 1", "print(years)"],
+        trap: "while money > 200:",
+        tests: [{ setup: "rate = 0.1", out: "8" }, { setup: "rate = 0.05", out: "15" }, { setup: "rate = 1.0", out: "1" }],
+        trapHint: "The trap is money > 200: that is the STOP situation. A while condition says when to KEEP going." },
+      { id: "collatz", title: "Collatz steps", task: "Repeat until n is 1: halve n if it is even, otherwise replace it with 3 * n + 1. Print how many steps it took.",
+        lines: ["steps = 0", "while n != 1:", "    if n % 2 == 0:", "        n = n // 2", "    else:", "        n = 3 * n + 1", "    steps = steps + 1", "print(steps)"],
+        trap: "if n % 2 == 1:",
+        tests: [{ setup: "n = 3", out: "7" }, { setup: "n = 6", out: "8" }, { setup: "n = 1", out: "0" }],
+        trapHint: "The trap is n % 2 == 1: that is True for ODD numbers, so even and odd get the wrong rule." },
+    ] },
+  { id: "break", title: "Stop early with break",
+    tip: "break leaves the loop at once. Give the answer its 'not found' value BEFORE the loop; only change it when you find what you are looking for.",
+    puzzles: [
+      { id: "firstneg", title: "First negative", task: "Print the POSITION of the first negative number, or -1 if there is none.",
+        lines: ["position = -1", "for i in range(len(numbers)):", "    if numbers[i] < 0:", "        position = i", "        break", "print(position)"],
+        trap: "position = numbers[i]",
+        tests: [{ setup: "numbers = [4, -2, -7]", out: "1" }, { setup: "numbers = [1, 2]", out: "-1" }, { setup: "numbers = [-3]", out: "0" }],
+        trapHint: "The trap is position = numbers[i]: that stores WHAT is there, not WHERE it is." },
+      { id: "contains", title: "Is it in the list?", task: "Print True if target is in the list, otherwise False. Stop looking as soon as you find it.",
+        lines: ["found = False", "for item in items:", "    if item == target:", "        found = True", "        break", "print(found)"],
+        trap: "if item != target:",
+        tests: [{ setup: "items = [3, 8, 1]\ntarget = 1", out: "True" }, { setup: "items = [3, 8, 1]\ntarget = 5", out: "False" }, { setup: "items = []\ntarget = 1", out: "False" }],
+        trapHint: "The trap is item != target: it stops at the first item that is NOT the target." },
+      { id: "firstlong", title: "First long word", task: "Print the first word with more than 5 letters, or none if there is no such word.",
+        lines: ['result = "none"', "for w in words:", "    if len(w) > 5:", "        result = w", "        break", "print(result)"],
+        trap: "continue",
+        tests: [{ setup: 'words = ["hi", "elephant", "giraffes"]', out: "elephant" }, { setup: 'words = ["cat"]', out: "none" }, { setup: 'words = ["volcano"]', out: "volcano" }],
+        trapHint: "The trap is continue: it only skips to the next round, so the loop keeps going and the LAST long word wins." },
+      { id: "untilzero", title: "Add until zero", task: "Add up the numbers, but stop at the first 0. Print the total.",
+        lines: ["total = 0", "for n in numbers:", "    if n == 0:", "        break", "    total = total + n", "print(total)"],
+        trap: "if n != 0:",
+        tests: [{ setup: "numbers = [4, 2, 0, 5]", out: "6" }, { setup: "numbers = [1, 2]", out: "3" }, { setup: "numbers = [0, 9]", out: "0" }],
+        trapHint: "The trap is n != 0: with it, the loop stops at the first number that is NOT zero." },
+    ] },
+  { id: "nested", title: "Loops inside loops",
+    tip: "The inner loop runs completely, from start to end, for every single round of the outer loop.",
+    puzzles: [
+      { id: "pairs", title: "All combinations", task: "Print every letter combined with every number, one pair per line.",
+        lines: ["for x in letters:", "    for y in numbers:", "        print(x, y)"],
+        trap: "    for y in letters:",
+        tests: [{ setup: 'letters = ["a", "b"]\nnumbers = [1, 2, 3]', out: "a 1\na 2\na 3\nb 1\nb 2\nb 3" }, { setup: 'letters = ["z"]\nnumbers = [0, 9]', out: "z 0\nz 9" }],
+        trapHint: "The trap is for y in letters: the inner loop must go through the numbers." },
+      { id: "triangle", title: "Star triangle", task: "Print a triangle of n lines: 1 star, then 2 stars, ... up to n stars.",
+        lines: ["for row in range(1, n + 1):", '    line = ""', "    for k in range(row):", '        line = line + "*"', "    print(line)"],
+        trap: "for k in range(n):",
+        tests: [{ setup: "n = 3", out: "*\n**\n***" }, { setup: "n = 1", out: "*" }],
+        trapHint: "The trap is range(n): every row would get n stars. Row number row needs row stars." },
+      { id: "table", title: "Times table", task: "Print the n by n times table, one row per line, numbers separated by spaces.",
+        lines: ["for i in range(1, n + 1):", "    row = []", "    for j in range(1, n + 1):", "        row.append(str(i * j))", '    print(" ".join(row))'],
+        trap: "for j in range(1, i + 1):",
+        tests: [{ setup: "n = 3", out: "1 2 3\n2 4 6\n3 6 9" }, { setup: "n = 1", out: "1" }],
+        trapHint: "The trap is range(1, i + 1): row i would only get i numbers instead of n." },
+      { id: "countpairs", title: "Pairs that add up", task: "Print how many pairs of different positions i < j have numbers[i] + numbers[j] == target.",
+        lines: ["count = 0", "for i in range(len(numbers)):", "    for j in range(i + 1, len(numbers)):", "        if numbers[i] + numbers[j] == target:", "            count = count + 1", "print(count)"],
+        trap: "for j in range(len(numbers)):",
+        tests: [{ setup: "numbers = [1, 2, 3, 4]\ntarget = 5", out: "2" }, { setup: "numbers = [1, 1, 1]\ntarget = 2", out: "3" }, { setup: "numbers = []\ntarget = 3", out: "0" }],
+        trapHint: "The trap is range(len(numbers)) for j: every pair is counted twice, and an item can be paired with itself." },
+    ] },
+];
+
+// Same shuffle every time for a given puzzle, so the lines do not jump around between visits.
+function seededShuffle(items, seedText) {
+  let h = 2166136261;
+  for (const c of seedText) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  const rand = () => { h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0; h = Math.imul(h ^ (h >>> 13), 3266489909) >>> 0; h ^= h >>> 16; return (h >>> 0) / 4294967296; };
+  const a = items.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  if (a.every((x, i) => x === items[i])) a.push(a.shift());   // never hand out the solution order
+  return a;
+}
+const PUZZLES = [];
+PUZZLE_SECTIONS.forEach(section => section.puzzles.forEach(p => {
+  p.section = section;
+  p.number = PUZZLES.length + 1;
+  p.solution = p.lines.map(t => ({ text: t.trim(), indent: (t.length - t.trimStart().length) / 4 }));
+  p.trap = p.trap.trim();
+  p.pool = seededShuffle([...p.solution.map(l => [l.text]), [p.trap, true]], p.id);
+  PUZZLES.push(p);
+}));
+
+// =====================================================================
+// Helpers
+// =====================================================================
+const $ = id => document.getElementById(id);
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const k in attrs) {
+    if (k === "class") n.className = attrs[k];
+    else if (k === "text") n.textContent = attrs[k];
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), attrs[k]);
+    else n.setAttribute(k, attrs[k]);
+  }
+  for (const c of kids) if (c != null) n.append(c);
+  return n;
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("looplab:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("looplab:" + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+};
+function norm(s) {
+  return String(s).trim().replace(/"/g, "'").replace(/\s+/g, " ").replace(/\s*([,\[\]()])\s*/g, "$1").replace(/,/g, ", ");
+}
+// Is the student's answer the same value as Python's?
+function sameValue(input, expected) {
+  const a = norm(input), b = norm(expected);
+  if (b === "") return a === "" || a === "-" || a === "–";
+  if (a === b) return true;
+  if (/^'.*'$/.test(b) && "'" + a + "'" === b) return true;   // accept a string without its quotes
+  return false;
+}
+function sameOutput(input, expected) {
+  const a = norm(input.replace(/\s*\/\s*/g, " ")), b = norm(expected.replace(/\n/g, " "));
+  if (a === b) return true;
+  return a.replace(/^'(.*)'$/, "$1") === b;
+}
+function floatHint(input, expected) {
+  const a = Number(String(input).trim()), b = Number(expected);
+  if (String(input).trim() !== "" && !isNaN(a) && !isNaN(b) && a === b && String(input).trim() !== expected)
+    return `Close! Python writes this value as ${expected}. Dividing with / always gives a float (with .0); whole-number arithmetic gives an int.`;
+  return "";
+}
+function friendly(e) {
+  if (!e) return "";
+  if (e.limit) return "Does this loop ever end? Find the line that should change the variable used in the while condition.";
+  switch (e.kind) {
+    case "IndexError": return "That position does not exist. A list of length n has positions 0 to n - 1.";
+    case "NameError": return "Python does not know this name. Is it spelled right, and does it get a value BEFORE this line runs?";
+    case "TypeError":
+      if (/not iterable/.test(e.msg)) return "for ... in needs something to go through: a list, a string or range(...).";
+      if (/interpreted as an integer/.test(e.msg)) return "range() needs whole numbers. To go through a string or a list, loop over it directly.";
+      if (/concatenate/.test(e.msg)) return "+ only joins a string with another string. Use str(...) to turn a number into text.";
+      return "This operation does not work with these kinds of values.";
+    case "IndentationError": return "Check the indentation: the body of a for, while or if is indented by 4 spaces, and lines at the same level line up exactly.";
+    case "SyntaxError": return "Python cannot read this line. Check the colons, brackets and quotes.";
+    case "ZeroDivisionError": return "Something was divided by zero.";
+    default: return "";
+  }
+}
+function errorBox(e, prefix = "") {
+  const box = el("div", { class: "msg bad" });
+  const title = e.limit ? "Stopped: the loop did not finish" : `${e.kind} on line ${e.line}`;
+  box.append(el("strong", { text: prefix + title }), document.createTextNode(e.limit ? ". " + e.msg + "." : ": " + e.msg + "."));
+  const h = friendly(e);
+  if (h) box.append(el("br"), document.createTextNode(h));
+  return box;
+}
+function changedNames(rows, i) {
+  const prev = new Map((i > 0 ? rows[i - 1].vars : []).map(v => [v.name, v.repr]));
+  return rows[i].vars.filter(v => prev.get(v.name) !== v.repr).map(v => v.name);
+}
+function allVarNames(rows) {
+  const names = [];
+  for (const r of rows) for (const v of r.vars) if (!names.includes(v.name)) names.push(v.name);
+  return names;
+}
+function renderCode(ol, code, marks) {
+  ol.textContent = "";
+  code.split("\n").forEach((text, i) => {
+    const n = i + 1;
+    const li = el("li", { class: marks[n] || "" },
+      el("span", { class: "ln", text: String(n) }),
+      el("span", { class: "mk", "aria-hidden": "true" }),
+      el("span", { class: "src", text: text || " " }));
+    if (marks[n] === "next") li.setAttribute("aria-current", "step");
+    ol.append(li);
+  });
+}
+function fillPresetSelect(select, ids) {
+  select.textContent = "";
+  const groups = {};
+  for (const p of PRESETS) {
+    if (ids && !ids.includes(p.id)) continue;
+    if (!groups[p.group]) { groups[p.group] = el("optgroup", { label: p.group }); select.append(groups[p.group]); }
+    groups[p.group].append(el("option", { value: p.id, text: p.title }));
+  }
+}
+
+// =====================================================================
+// Tabs (routed on the hash so a link can open a specific activity)
+// =====================================================================
+const VIEWS = ["home", "step", "trace", "puzzles"];
+function showView(name) {
+  if (!VIEWS.includes(name)) name = "home";
+  if (name === "home") renderProgress();
+  for (const v of VIEWS) {
+    $("view-" + v).hidden = v !== name;
+    $("tab-" + v).setAttribute("aria-selected", String(v === name));
+  }
+  if (name !== "step") stopPlay();
+}
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  const v = t.dataset.view;
+  if (location.hash !== "#" + v) location.hash = v; else showView(v);
+}));
+window.addEventListener("hashchange", () => showView(location.hash.slice(1)));
+
+// =====================================================================
+// 1. STEP THROUGH
+// =====================================================================
+const S = { code: "", note: "", title: "", result: null, pos: 0, answered: new Set(), right: 0, total: 0, tries: 0, play: null, flash: [] };
+
+function loadProgram(code, title, note, presetId) {
+  stopPlay();
+  S.code = code; S.title = title; S.note = note;
+  S.result = run(code);
+  S.pos = 0; S.answered = new Set(); S.right = 0; S.total = 0; S.flash = [];
+  $("preset").value = presetId || "";
+  if (!presetId) {
+    let custom = $("preset").querySelector('option[value=""]');
+    if (!custom) { custom = el("option", { value: "", text: "Your own code" }); $("preset").prepend(custom); }
+    custom.textContent = title;
+    $("preset").value = "";
+  } else {
+    const custom = $("preset").querySelector('option[value=""]');
+    if (custom) custom.remove();
+    store.set("preset", presetId);
+  }
+  closeEditor();
+  hidePrompt();
+  renderStep();
+}
+
+function renderStep() {
+  const r = S.result, rows = r.rows, pos = S.pos;
+  const marks = {};
+  if (pos > 0) marks[rows[pos - 1].line] = rows[pos - 1].error ? "err" : "ran";
+  if (pos < rows.length) marks[rows[pos].line] = "next";
+  renderCode($("codeView"), S.code, marks);
+  $("codeTitle").textContent = S.title;
+  $("note").textContent = S.note;
+  $("stepCount").textContent = `Step ${pos} / ${rows.length}`;
+  $("btnBack").disabled = pos === 0;
+  $("btnReset").disabled = pos === 0;
+  $("btnStep").disabled = pos >= rows.length;
+  $("btnPlay").disabled = pos >= rows.length;
+  $("btnPlay").textContent = S.play ? "Pause" : "Play";
+  $("score").textContent = `Predictions right first time: ${S.right} / ${S.total}`;
+
+  // variables
+  const vars = $("vars"); vars.textContent = "";
+  const cur = pos > 0 ? rows[pos - 1].vars : [];
+  const changed = pos > 0 ? changedNames(rows, pos - 1) : [];
+  if (!cur.length) vars.append(el("p", { class: "empty", text: pos === 0 ? "No variables yet. Press Step to run the first line." : "No variables yet." }));
+  for (const v of cur) {
+    const val = el("div", { class: "var-val" });
+    if (v.items) {
+      const cells = el("span", { class: "cells" + (v.items.length ? "" : " empty-list") });
+      if (!v.items.length) cells.textContent = "[ ]";
+      v.items.forEach((it, i) => cells.append(el("span", { class: "cell" }, el("span", { class: "v", text: it }), el("span", { class: "ix", text: String(i) }))));
+      val.append(cells);
+    } else val.append(el("span", { class: "scalar", text: v.repr }));
+    const isChanged = changed.includes(v.name);
+    const box = el("div", { class: "var" + (isChanged ? " changed" : "") + (isChanged && S.flash.includes(v.name) ? " flash" : "") },
+      el("div", { class: "var-name" }, document.createTextNode(v.name), el("small", { text: v.type })), val);
+    vars.append(box);
+  }
+  S.flash = [];
+
+  // output
+  const outEl = $("output"); outEl.textContent = "";
+  const printed = rows.slice(0, pos).map(x => x.out).join("");
+  if (printed) outEl.textContent = printed; else outEl.append(el("span", { class: "none", text: "Nothing printed yet." }));
+  const re = $("runError"); re.textContent = "";
+  const errNow = (pos === rows.length && r.error) ? r.error : null;
+  re.hidden = !errNow;
+  if (errNow) re.append(errorBox(errNow));
+
+  renderStepTable();
+}
+
+function renderStepTable() {
+  const rows = S.result.rows, names = allVarNames(rows), t = $("traceTable");
+  t.textContent = "";
+  const head = el("tr", {}, el("th", { text: "Step" }), el("th", { text: "Line" }), el("th", { text: "Code" }));
+  names.forEach(n => head.append(el("th", { class: "var-col", text: n })));
+  head.append(el("th", { text: "Printed" }));
+  t.append(el("thead", {}, head));
+  const body = el("tbody");
+  const codeLines = S.code.split("\n");
+  for (let i = 0; i < S.pos; i++) {
+    const row = rows[i], ch = changedNames(rows, i), m = new Map(row.vars.map(v => [v.name, v.repr]));
+    const tr = el("tr", { class: row.error ? "err-row" : "" },
+      el("td", { class: "num", text: String(i + 1) }), el("td", { class: "num", text: String(row.line) }),
+      el("td", { class: "code-cell", text: (codeLines[row.line - 1] || "").trim() }));
+    for (const n of names) {
+      const has = m.has(n);
+      tr.append(el("td", { class: "val " + (!has ? "unset" : ch.includes(n) ? "chg" : "") }, has ? el("span", { text: m.get(n) }) : "–"));
+    }
+    tr.append(el("td", { class: "val", text: row.error ? row.error.kind : row.out.replace(/\n$/, "").replace(/\n/g, " / ") }));
+    body.append(tr);
+  }
+  if (S.pos === 0) {
+    const td = el("td", { colspan: String(names.length + 4), class: "unset", text: "Rows appear here as Python runs each line." });
+    body.append(el("tr", {}, td));
+  }
+  t.append(body);
+  const w = $("traceWrap"); w.scrollTop = w.scrollHeight;
+}
+
+function needsPrompt(i) {
+  if (!$("predictToggle").checked || S.answered.has(i)) return false;
+  const row = S.result.rows[i];
+  if (row.error) return false;
+  return changedNames(S.result.rows, i).length > 0 || row.out !== "";
+}
+function advance() {
+  const rows = S.result.rows;
+  if (S.pos >= rows.length) return false;
+  if (needsPrompt(S.pos)) { showPrompt(S.pos); return false; }
+  S.flash = changedNames(rows, S.pos);
+  S.pos++;
+  renderStep();
+  return true;
+}
+function showPrompt(i) {
+  stopPlay();
+  const row = S.result.rows[i], code = S.code.split("\n")[row.line - 1].trim();
+  const ch = changedNames(S.result.rows, i);
+  S.tries = 0;
+  const q = $("promptQ"); q.textContent = "";
+  q.append(document.createTextNode(`Line ${row.line} runs next: `), el("code", { text: code }),
+    document.createTextNode(ch.length && row.out ? " What will change, and what will it print?" : ch.length ? " What will change?" : " What will it print?"));
+  const f = $("guessForm"); f.textContent = "";
+  ch.forEach((n, k) => {
+    const id = "guess-" + k;
+    f.append(el("label", { for: id, text: n + " =" }), el("input", { type: "text", id, "data-name": n, spellcheck: "false", autocapitalize: "off" }));
+  });
+  if (row.out) f.append(el("label", { for: "guess-out", text: "prints" }), el("input", { type: "text", id: "guess-out", "data-out": "1", spellcheck: "false", autocapitalize: "off" }));
+  $("promptMsg").hidden = true;
+  $("prompt").hidden = false;
+  $("btnStep").disabled = true;
+  const first = f.querySelector("input");
+  if (first) first.focus({ preventScroll: false });
+}
+function hidePrompt() { $("prompt").hidden = true; }
+function promptTip(kind) {
+  if (kind === "for") return "Tip: the for line gives the loop variable the NEXT value from the list or range.";
+  if (kind === "assign") return "Tip: work out the right-hand side using the values in Variables right now, then store the result on the left.";
+  return "Tip: use the values shown in Variables right now.";
+}
+function checkPrompt() {
+  const i = S.pos, row = S.result.rows[i];
+  const m = new Map(row.vars.map(v => [v.name, v.repr]));
+  let ok = true, extra = "";
+  for (const inp of $("guessForm").querySelectorAll("input")) {
+    let good;
+    if (inp.dataset.out) good = sameOutput(inp.value, row.out.replace(/\n$/, ""));
+    else {
+      const expected = m.get(inp.dataset.name);
+      good = sameValue(inp.value, expected);
+      if (!good && !extra) extra = floatHint(inp.value, expected);
+    }
+    inp.classList.toggle("right", good); inp.classList.toggle("wrong", !good);
+    if (!good) ok = false;
+  }
+  if (ok) {
+    if (S.tries === 0) S.right++;
+    S.total++;
+    finishPrompt();
+  } else {
+    S.tries++;
+    const msg = $("promptMsg");
+    msg.hidden = false;
+    msg.textContent = "Not yet. " + (extra || promptTip(S.result.kinds[row.line]));
+    const wrong = $("guessForm").querySelector("input.wrong");
+    if (wrong) wrong.select();
+  }
+}
+function finishPrompt() {
+  S.answered.add(S.pos);
+  hidePrompt();
+  S.flash = changedNames(S.result.rows, S.pos);
+  S.pos++;
+  renderStep();
+  $("btnStep").focus();
+}
+function revealPrompt() { S.total++; finishPrompt(); }
+function stopPlay() { if (S.play) { clearInterval(S.play); S.play = null; } if ($("btnPlay")) $("btnPlay").textContent = "Play"; }
+
+$("btnStep").addEventListener("click", advance);
+$("btnBack").addEventListener("click", () => { stopPlay(); hidePrompt(); if (S.pos > 0) { S.pos--; renderStep(); } });
+$("btnReset").addEventListener("click", () => { stopPlay(); hidePrompt(); S.pos = 0; S.answered = new Set(); S.right = 0; S.total = 0; renderStep(); });
+$("btnPlay").addEventListener("click", () => {
+  if (S.play) { stopPlay(); return; }
+  if (!advance()) return;
+  S.play = setInterval(() => { if (!advance()) stopPlay(); }, 1750);
+  $("btnPlay").textContent = "Pause";
+});
+$("btnCheck").addEventListener("click", checkPrompt);
+$("btnShow").addEventListener("click", revealPrompt);
+$("guessForm").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); checkPrompt(); } });
+$("guessForm").addEventListener("submit", e => e.preventDefault());
+$("predictToggle").addEventListener("change", e => { store.set("predict", e.target.checked); if (!e.target.checked) hidePrompt(); renderStep(); });
+$("preset").addEventListener("change", e => {
+  const p = PRESETS.find(x => x.id === e.target.value);
+  if (p) loadProgram(p.code, p.title, p.note, p.id);
+});
+
+// editor
+function openEditor() {
+  stopPlay(); hidePrompt();
+  $("editor").value = S.code;
+  $("codeView").hidden = true; $("controls").hidden = true;
+  $("editWrap").hidden = false; $("editError").hidden = true;
+  $("editor").focus();
+}
+function closeEditor() { $("codeView").hidden = false; $("controls").hidden = false; $("editWrap").hidden = true; }
+$("btnEdit").addEventListener("click", openEditor);
+$("cancelEdit").addEventListener("click", () => { closeEditor(); renderStep(); });
+$("runEdit").addEventListener("click", () => {
+  const code = $("editor").value.replace(/\s+$/, "");
+  const r = run(code);
+  if (r.parseError) {
+    const box = $("editError"); box.textContent = ""; box.append(errorBox(r.error)); box.hidden = false;
+    return;
+  }
+  const same = PRESETS.find(p => p.code === code);
+  if (same) loadProgram(same.code, same.title, same.note, same.id);
+  else loadProgram(code, "Your own code", "Your own code. Step through it and check every value against what you expected.", null);
+});
+$("editor").addEventListener("keydown", e => {
+  if (e.key === "Tab" && !e.shiftKey) {
+    e.preventDefault();
+    const t = e.target, s = t.selectionStart;
+    t.setRangeText("    ", s, t.selectionEnd, "end");
+  }
+});
+document.addEventListener("keydown", e => {
+  if ($("view-step").hidden) return;
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select" || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === "ArrowRight" && $("prompt").hidden && !$("btnStep").disabled) { e.preventDefault(); advance(); }
+  if (e.key === "ArrowLeft" && !$("btnBack").disabled) { e.preventDefault(); $("btnBack").click(); }
+});
+
+// =====================================================================
+// 2. TRACE TABLE CHALLENGE
+// =====================================================================
+const T = { preset: null, rows: [], names: [], cur: 0, tries: 0, results: [] };
+
+function loadTrace(id) {
+  const p = PRESETS.find(x => x.id === id) || PRESETS[0];
+  const r = run(p.code);
+  T.preset = p; T.rows = r.rows; T.kinds = r.kinds; T.names = allVarNames(r.rows); T.cur = 0; T.tries = 0; T.results = [];
+  $("tPreset").value = p.id;
+  store.set("tpreset", p.id);
+  $("tMsg").hidden = true;
+  renderTrace(true);
+}
+function expectedFor(i, name) {
+  const v = T.rows[i].vars.find(x => x.name === name);
+  return v ? v.repr : "";
+}
+function renderTrace(focus) {
+  const rows = T.rows, cur = T.cur, done = cur >= rows.length;
+  const marks = {};
+  if (!done) marks[rows[cur].line] = "ran";
+  renderCode($("tCode"), T.preset.code, marks);
+  const firstTry = T.results.filter(x => x === "first").length;
+  $("tScore").textContent = `Right first time: ${firstTry} / ${T.results.length}`;
+  $("tProgress").textContent = done ? "Finished" : `Row ${cur + 1} of ${rows.length}`;
+  $("tCheck").hidden = done;
+  $("tReveal").hidden = done || T.tries < 2;
+
+  const t = $("tTable"); t.textContent = "";
+  const head = el("tr", {}, el("th", { text: "Step" }), el("th", { text: "Line" }), el("th", { text: "Code" }));
+  T.names.forEach(n => head.append(el("th", { class: "var-col", text: n })));
+  head.append(el("th", { text: "Printed" }), el("th", { text: "" }));
+  t.append(el("thead", {}, head));
+  const body = el("tbody"), codeLines = T.preset.code.split("\n");
+  for (let i = 0; i <= Math.min(cur, rows.length - 1); i++) {
+    const row = rows[i];
+    const tr = el("tr", { class: i === cur ? "current" : "" },
+      el("td", { class: "num", text: String(i + 1) }), el("td", { class: "num", text: String(row.line) }),
+      el("td", { class: "code-cell", text: (codeLines[row.line - 1] || "").trim() }));
+    if (i < cur) {
+      const ch = changedNames(rows, i);
+      for (const n of T.names) {
+        const v = expectedFor(i, n);
+        tr.append(el("td", { class: "val " + (v === "" ? "unset" : ch.includes(n) ? "chg" : "") }, v === "" ? "–" : el("span", { text: v })));
+      }
+      tr.append(el("td", { class: "val", text: row.out.replace(/\n$/, "").replace(/\n/g, " / ") }));
+      const res = T.results[i];
+      tr.append(el("td", { class: "badge " + (res === "first" ? "ok" : "late"), text: res === "first" ? "✓ first try" : res === "shown" ? "shown" : "✓" }));
+    } else {
+      T.names.forEach((n, k) => {
+        const prev = i > 0 ? expectedFor(i - 1, n) : "";
+        const inp = el("input", { type: "text", id: "t-in-" + k, "data-name": n, "aria-label": `${n} after step ${i + 1}`, spellcheck: "false", autocapitalize: "off" });
+        inp.value = prev;
+        inp.placeholder = "–";
+        tr.append(el("td", {}, inp));
+      });
+      const o = el("input", { type: "text", id: "t-in-out", "data-out": "1", "aria-label": `printed at step ${i + 1}`, spellcheck: "false", autocapitalize: "off" });
+      tr.append(el("td", {}, o), el("td", {}));
+    }
+    body.append(tr);
+  }
+  t.append(body);
+  if (done) {
+    const msg = $("tMsg");
+    msg.hidden = false; msg.className = "msg good";
+    msg.textContent = `Table complete: ${firstTry} of ${rows.length} rows right on the first try. Pick another program above, or open it in Step through to replay it.`;
+  } else if (focus) {
+    const first = t.querySelector("tbody tr.current input");
+    if (first) first.focus({ preventScroll: true });
+  }
+}
+function checkTraceRow() {
+  const i = T.cur, row = T.rows[i];
+  let ok = true, extra = "";
+  for (const inp of $("tTable").querySelectorAll("tr.current input")) {
+    let good;
+    if (inp.dataset.out) good = sameOutput(inp.value, row.out.replace(/\n$/, ""));
+    else {
+      const expected = expectedFor(i, inp.dataset.name);
+      good = sameValue(inp.value, expected);
+      if (!good && !extra) extra = floatHint(inp.value, expected);
+    }
+    inp.classList.toggle("right", good); inp.classList.toggle("wrong", !good);
+    if (!good) ok = false;
+  }
+  const msg = $("tMsg");
+  if (ok) {
+    T.results[i] = T.tries === 0 ? "first" : "later";
+    T.cur++; T.tries = 0;
+    msg.hidden = true;
+    renderTrace(true);
+  } else {
+    T.tries++;
+    msg.hidden = false; msg.className = "msg bad";
+    const kind = { for: "This is a for line: the loop variable takes its next value (or, if nothing is left, nothing changes and the loop ends).",
+      while: "This is a while line: only the condition is checked here. No variable changes.",
+      if: "This is an if line: only the condition is checked here. No variable changes." }[T.kinds[row.line]] || "";
+    msg.textContent = "Some cells are not right yet (in red). " + (extra || kind || "Use the values from the row above and work out this one line.");
+    $("tReveal").hidden = T.tries < 2;
+    const wrong = $("tTable").querySelector("input.wrong");
+    if (wrong) wrong.select();
+  }
+}
+$("tCheck").addEventListener("click", checkTraceRow);
+$("tReveal").addEventListener("click", () => { T.results[T.cur] = "shown"; T.cur++; T.tries = 0; $("tMsg").hidden = true; renderTrace(true); });
+$("tRestart").addEventListener("click", () => loadTrace(T.preset.id));
+$("tPreset").addEventListener("change", e => loadTrace(e.target.value));
+$("tTable").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); checkTraceRow(); } });
+
+// =====================================================================
+// 3. LINE PUZZLES
+// =====================================================================
+const P = { idx: 0, program: [], solved: new Set(store.get("solved", [])) };
+
+function puzzle() { return PUZZLES[P.idx]; }
+function loadPuzzle(i) {
+  P.idx = Math.max(0, Math.min(PUZZLES.length - 1, i)); P.program = [];
+  store.set("puzzleId", PUZZLES[P.idx].id);
+  $("pzFeedback").textContent = "";
+  renderPuzzle();
+}
+function programCode() { return P.program.map(l => "    ".repeat(l.indent) + l.text).join("\n"); }
+
+// ---- progress and reset (Start page and Line puzzles share the same state) ----
+const solvedCount = () => PUZZLES.filter(p => P.solved.has(p.id)).length;
+function renderProgress() {
+  const n = solvedCount(), t = PUZZLES.length;
+  $("homeProgress").textContent = `Puzzles solved: ${n} / ${t}`;
+  $("pzProgress").textContent = `Solved: ${n} / ${t}`;
+  $("pzBar").style.width = (100 * n / t) + "%";
+  renderResets();
+}
+function renderResets() {
+  const n = solvedCount();
+  document.querySelectorAll("[data-reset]").forEach(box => {
+    box.textContent = "";
+    if (box.dataset.confirm === "1" && n > 0) {
+      const yes = el("button", { class: "btn danger", type: "button", text: "Yes, reset", onclick: resetProgress });
+      box.append(
+        el("span", { class: "reset-q", text: `Clear all ${n} solved puzzle${n === 1 ? "" : "s"}?` }),
+        yes,
+        el("button", { class: "btn", type: "button", text: "Cancel", onclick: () => { box.dataset.confirm = ""; renderResets(); box.querySelector("button").focus(); } }));
+      return;
+    }
+    box.dataset.confirm = "";
+    const b = el("button", { class: "btn subtle", type: "button", text: "Reset progress",
+      title: n ? "Mark every puzzle as not solved" : "Nothing to reset yet",
+      onclick: () => { box.dataset.confirm = "1"; renderResets(); box.querySelector(".btn.danger").focus(); } });
+    if (!n) b.disabled = true;
+    box.append(b);
+    if (P.justReset) box.append(el("span", { class: "reset-done", role: "status", text: "Progress reset." }));
+  });
+}
+function resetProgress() {
+  P.solved = new Set();
+  store.set("solved", []);
+  document.querySelectorAll("[data-reset]").forEach(b => { b.dataset.confirm = ""; });
+  P.justReset = true;
+  $("pzFeedback").textContent = "";
+  renderPuzzle();
+  renderProgress();
+  const again = document.querySelector("section:not([hidden]) [data-reset] button");
+  if (again) again.focus();
+  setTimeout(() => { P.justReset = false; renderResets(); }, 3000);
+}
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  document.querySelectorAll('[data-reset][data-confirm="1"]').forEach(b => { b.dataset.confirm = ""; });
+  renderResets();
+});
+
+function renderPuzzle() {
+  const pz = puzzle();
+  const pick = $("pzPick"); pick.textContent = "";
+  for (const sec of PUZZLE_SECTIONS) {
+    const done = sec.puzzles.filter(q => P.solved.has(q.id)).length;
+    const chips = el("div", { class: "pz-chips" });
+    for (const q of sec.puzzles) {
+      const solved = P.solved.has(q.id);
+      chips.append(el("button", { type: "button", class: "pz-num" + (solved ? " solved" : ""), "aria-pressed": String(q === pz),
+        title: q.title + (solved ? " (solved)" : ""), "aria-label": `Puzzle ${q.number}: ${q.title}${solved ? ", solved" : ""}`,
+        onclick: () => loadPuzzle(q.number - 1), text: String(q.number) }));
+    }
+    pick.append(el("div", { class: "pz-row" },
+      el("div", { class: "pz-sec" }, el("span", { text: sec.title }), el("small", { text: `${done} / ${sec.puzzles.length}` })), chips));
+  }
+
+  const task = $("pzTask"); task.textContent = "";
+  const prev = el("button", { class: "btn", type: "button", text: "← Previous", onclick: () => loadPuzzle(P.idx - 1) });
+  const next = el("button", { class: "btn", type: "button", text: "Next →", onclick: () => loadPuzzle(P.idx + 1) });
+  if (P.idx === 0) prev.disabled = true;
+  if (P.idx === PUZZLES.length - 1) next.disabled = true;
+  const title = el("h2", { style: "font-size:1.15rem" }, document.createTextNode(`${pz.number}. ${pz.title}`));
+  if (P.solved.has(pz.id)) title.append(el("span", { class: "solved-badge", text: "✓ solved" }));
+  const given = el("div", { class: "given" },
+    el("span", {}, document.createTextNode("Given: "), el("code", { text: pz.tests[0].setup })),
+    el("span", {}, document.createTextNode("It should print: "), el("code", { text: pz.tests[0].out })));
+  task.append(
+    el("div", { class: "task-top" }, el("span", { class: "label", text: `${pz.section.title} · puzzle ${pz.number} of ${PUZZLES.length}` }), el("div", { class: "task-nav" }, prev, next)),
+    title, el("p", { text: pz.task }), given,
+    el("p", { class: "stepcount", text: `Your program is also tested with ${pz.tests.length - 1} other input${pz.tests.length > 2 ? "s" : ""}.` }),
+    el("p", { class: "tip" }, el("strong", { text: "Pattern: " }), document.createTextNode(pz.section.tip)));
+
+  const used = new Set(P.program.map(l => l.k));
+  const pool = $("pzPool"); pool.textContent = "";
+  pz.pool.forEach(([text, trap], k) => {
+    if (used.has(k)) return;
+    const grip = el("span", { class: "grip", "aria-hidden": "true", text: "⠇" });
+    const label = el("span", { text });
+    const btn = el("button", { type: "button", "aria-label": `add line: ${text}`, onclick: () => { if (!DND.justDragged) addLine(k); } }, grip, label);
+    const info = { from: "pool", k, text, trap: !!trap, indent: 0, textEl: label };
+    armDrag(grip, btn, info, true);
+    armDrag(btn, btn, info, false);
+    pool.append(el("li", {}, btn));
+  });
+  if (!pool.children.length) pool.append(el("li", { class: "empty", text: "All lines used. Drag a line back here to remove it." }));
+
+  const prog = $("pzProgram"); prog.textContent = "";
+  if (!P.program.length) prog.append(el("li", { class: "empty", text: "Click or drag lines from the left to build your program here." }));
+  P.program.forEach((l, i) => {
+    const mini = (label, aria, fn, disabled) => el("button", Object.assign({ type: "button", "aria-label": aria, text: label, onclick: fn }, disabled ? { disabled: "" } : {}));
+    const src = el("div", { class: "src", style: `--indent:${l.indent}`, text: "    ".repeat(l.indent) + l.text });
+    const grip = el("span", { class: "grip", "aria-hidden": "true", title: "Drag to move or indent", text: "⠇" });
+    const li = el("li", { class: "prog-line" },
+      el("div", { class: "mini" },
+        mini("←", `indent less: ${l.text}`, () => { l.indent--; renderPuzzle(); }, l.indent === 0),
+        mini("→", `indent more: ${l.text}`, () => { l.indent++; renderPuzzle(); }, l.indent >= 4)),
+      grip,
+      src,
+      el("div", { class: "mini" },
+        mini("↑", `move up: ${l.text}`, () => { move(i, -1); }, i === 0),
+        mini("↓", `move down: ${l.text}`, () => { move(i, 1); }, i === P.program.length - 1),
+        mini("×", `remove: ${l.text}`, () => { P.program.splice(i, 1); renderPuzzle(); })));
+    const info = { from: "prog", i, k: l.k, text: l.text, trap: l.trap, indent: l.indent, srcEl: src };
+    armDrag(grip, li, info, true);
+    armDrag(src, li, info, false);
+    prog.append(li);
+  });
+}
+
+// ---- drag and drop (pointer events: mouse, pen and touch) ----
+// Mouse: drag the whole line. Touch: drag the grip, so the page still scrolls elsewhere.
+const DND = { s: null, justDragged: false };
+function indentUnit() {
+  const probe = el("span", { class: "indent-probe", text: "    " });
+  document.body.append(probe);
+  const w = probe.getBoundingClientRect().width;
+  probe.remove();
+  return w || 32;
+}
+function textLeftOf(info, unit) {
+  if (info.textEl) return info.textEl.getBoundingClientRect().left;
+  const r = info.srcEl.getBoundingClientRect();
+  return r.left + 11 + info.indent * unit;   // 10px padding + 1px border, then the indentation
+}
+function armDrag(handle, lineEl, info, anyPointer) {
+  handle.addEventListener("pointerdown", e => {
+    if (e.button !== 0 || DND.s) return;
+    if (!anyPointer && e.pointerType !== "mouse") return;
+    e.stopPropagation();
+    const unit = indentUnit();
+    const top = lineEl.getBoundingClientRect().top;
+    DND.s = { info, lineEl, handle, unit, pointerId: e.pointerId, x0: e.clientX, y0: e.clientY,
+      dx: e.clientX - textLeftOf(info, unit), dy: e.clientY - top, active: false, target: null };
+    try { handle.setPointerCapture(e.pointerId); } catch (x) { /* not supported */ }
+    if (e.pointerType !== "mouse") e.preventDefault();
+  });
+}
+function beginDrag(s) {
+  s.active = true;
+  document.body.classList.add("is-dragging");
+  s.ghost = el("div", { class: "drag-ghost", text: s.info.text });
+  document.body.append(s.ghost);
+  s.ph = el("li", { class: "prog-line placeholder", "aria-hidden": "true" },
+    el("div"), el("div"), el("div", { class: "src", style: "--indent:0" }), el("div"));
+  if (s.info.from === "prog") {
+    // the preview takes the line's place first, so the lines below do not jump up
+    const phSrc = s.ph.querySelector(".src");
+    phSrc.style.setProperty("--indent", String(s.info.indent));
+    phSrc.textContent = "    ".repeat(s.info.indent) + s.info.text;
+    s.lineEl.before(s.ph);
+    s.lineEl.classList.add("dragging");
+  }
+}
+function moveDrag(s, x, y) {
+  s.ghost.style.transform = `translate(${x - s.dx - 11}px, ${y - s.dy}px)`;
+  if (y < 50) window.scrollBy(0, -14);
+  else if (y > window.innerHeight - 50) window.scrollBy(0, 14);
+
+  const prog = $("pzProgram"), pool = $("pzPool");
+  const pr = prog.getBoundingClientRect(), po = pool.getBoundingClientRect();
+  const inProg = x > pr.left - 40 && x < pr.right + 40 && y > pr.top - 30 && y < pr.bottom + 30;
+  const inPool = !inProg && x > po.left && x < po.right && y > po.top && y < po.bottom;
+  pool.classList.toggle("drop-remove", inPool && s.info.from === "prog");
+
+  if (!inProg) {
+    s.ph.remove();
+    s.target = inPool && s.info.from === "prog" ? { type: "pool" } : null;
+    return;
+  }
+  const lines = [...prog.querySelectorAll(".prog-line:not(.dragging):not(.placeholder)")];
+  let index = lines.findIndex(li => { const r = li.getBoundingClientRect(); return y < r.top + r.height / 2; });
+  if (index === -1) index = lines.length;
+  prog.insertBefore(s.ph, lines[index] || null);
+  const phSrc = s.ph.querySelector(".src");
+  const baseLeft = phSrc.getBoundingClientRect().left + 11;
+  const indent = Math.max(0, Math.min(4, Math.round((x - s.dx - baseLeft) / s.unit)));
+  phSrc.style.setProperty("--indent", String(indent));
+  phSrc.textContent = "    ".repeat(indent) + s.info.text;
+  s.target = { type: "prog", index, indent };
+}
+function endDrag(s, commit) {
+  document.body.classList.remove("is-dragging");
+  $("pzPool").classList.remove("drop-remove");
+  if (s.ghost) s.ghost.remove();
+  if (s.ph) s.ph.remove();
+  s.lineEl.classList.remove("dragging");
+  DND.justDragged = true;
+  setTimeout(() => { DND.justDragged = false; }, 0);
+  if (!commit || !s.target) { renderPuzzle(); return; }
+  if (s.target.type === "prog") {
+    const arr = P.program.slice();
+    let item;
+    if (s.info.from === "prog") { item = arr[s.info.i]; arr.splice(s.info.i, 1); }
+    else item = { k: s.info.k, text: s.info.text, trap: s.info.trap };
+    item.indent = s.target.indent;
+    arr.splice(s.target.index, 0, item);
+    P.program = arr;
+  } else if (s.target.type === "pool" && s.info.from === "prog") {
+    P.program.splice(s.info.i, 1);
+  }
+  $("pzFeedback").textContent = "";
+  renderPuzzle();
+}
+document.addEventListener("pointermove", e => {
+  const s = DND.s;
+  if (!s || e.pointerId !== s.pointerId) return;
+  if (!s.active) {
+    if (Math.hypot(e.clientX - s.x0, e.clientY - s.y0) < 6) return;
+    beginDrag(s);
+  }
+  e.preventDefault();
+  moveDrag(s, e.clientX, e.clientY);
+}, { passive: false });
+document.addEventListener("pointerup", e => {
+  const s = DND.s;
+  if (!s || e.pointerId !== s.pointerId) return;
+  DND.s = null;
+  if (s.active) endDrag(s, true);
+});
+document.addEventListener("pointercancel", e => {
+  const s = DND.s;
+  if (!s || e.pointerId !== s.pointerId) return;
+  DND.s = null;
+  if (s.active) endDrag(s, false);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && DND.s) { const s = DND.s; DND.s = null; if (s.active) endDrag(s, false); }
+});
+function addLine(k) {
+  const prev = P.program[P.program.length - 1];
+  const indent = prev ? prev.indent + (prev.text.endsWith(":") ? 1 : 0) : 0;
+  const [text, trap] = puzzle().pool[k];
+  P.program.push({ k, text, trap: !!trap, indent });
+  renderPuzzle();
+}
+function move(i, d) {
+  const a = P.program; [a[i], a[i + d]] = [a[i + d], a[i]];
+  renderPuzzle();
+}
+function checkPuzzle() {
+  const pz = puzzle(), fb = $("pzFeedback"); fb.textContent = "";
+  if (!P.program.length) { fb.append(el("p", { class: "msg info", text: "Add some lines first." })); return; }
+  const code = programCode();
+  const results = el("div", { class: "results" });
+  let passed = 0, firstError = null;
+  for (const t of pz.tests) {
+    const env = new Map();
+    run(t.setup, { env, record: false });
+    const r = run(code, { env });
+    if (r.parseError) { fb.append(errorBox(r.error)); return; }
+    if (r.error && !firstError) firstError = r.error;
+    const got = r.out.replace(/\n$/, "");
+    const ok = !r.error && got === t.out;
+    if (ok) passed++;
+    const line = el("div", { class: "result " + (ok ? "pass" : "fail") },
+      el("span", { class: "ic", text: ok ? "✓" : "✗" }),
+      el("span", {}, el("code", { text: t.setup }), document.createTextNode(ok ? " printed " : " expected "), el("code", { text: t.out }),
+        ok ? null : document.createTextNode(r.error ? `, but the program stopped with ${r.error.kind}` : ", but got "),
+        ok || r.error ? null : el("code", { text: got || "(nothing)" })));
+    results.append(line);
+  }
+  fb.append(results);
+  if (passed === pz.tests.length) {
+    P.solved.add(pz.id); store.set("solved", [...P.solved]);
+    const good = el("div", { class: "msg good", style: "display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center" },
+      el("span", { text: "Solved! Press Watch it run to see every step of your program." }));
+    if (P.idx < PUZZLES.length - 1) good.append(el("button", { class: "btn primary", type: "button", text: "Next puzzle →", onclick: () => loadPuzzle(P.idx + 1) }));
+    else good.append(el("span", { text: "That was the last one. Well done!" }));
+    fb.prepend(good);
+    renderPuzzle();
+    renderProgress();
+  } else {
+    if (firstError) fb.append(errorBox(firstError));
+    const trapUsed = P.program.some(l => l.trap);
+    fb.append(el("p", { class: "msg info", text: trapUsed ? pz.trapHint : "Check the order and the indentation. Which lines must run only once (before or after the loop), and which run every round?" }));
+  }
+}
+$("pzCheck").addEventListener("click", checkPuzzle);
+$("pzClear").addEventListener("click", () => loadPuzzle(P.idx));
+$("pzWatch").addEventListener("click", () => {
+  if (!P.program.length) { $("pzFeedback").textContent = ""; $("pzFeedback").append(el("p", { class: "msg info", text: "Add some lines first." })); return; }
+  const pz = puzzle();
+  loadProgram(pz.tests[0].setup + "\n" + programCode(), "Puzzle: " + pz.title, `Your answer to the "${pz.title}" puzzle. ${pz.task}`, null);
+  location.hash = "step";
+});
+
+// =====================================================================
+// Start
+// =====================================================================
+fillPresetSelect($("preset"));
+fillPresetSelect($("tPreset"), TRACE_IDS);
+$("predictToggle").checked = store.get("predict", true);
+{
+  const p = PRESETS.find(x => x.id === store.get("preset", "sum")) || PRESETS[0];
+  loadProgram(p.code, p.title, p.note, p.id);
+}
+loadTrace(store.get("tpreset", "sum"));
+{
+  const i = PUZZLES.findIndex(p => p.id === store.get("puzzleId", ""));
+  loadPuzzle(i >= 0 ? i : 0);
+}
+renderProgress();
+showView(location.hash.slice(1));
+</script>
+
+</body>
+</html>
