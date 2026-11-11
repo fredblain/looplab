@@ -1343,6 +1343,24 @@ const PRESETS = [
   { group: "for loops", id: "nested", title: "A loop inside a loop",
     code: L("for row in range(3):", "    for col in range(2):", "        print(row, col)"),
     note: "The inner loop runs completely, from start to end, for every single round of the outer loop." },
+  { group: "Values or positions?", id: "pos-values", title: "Loop over the values",
+    code: L('names = ["Ana", "Bo", "Cy"]', "for name in names:", "    print(name)"),
+    note: "for name in names gives you each VALUE in turn: 'Ana', then 'Bo', then 'Cy'. Simple, and enough when you don't need to know where an item is. Compare with the next example." },
+  { group: "Values or positions?", id: "pos-positions", title: "Loop over the positions",
+    code: L('names = ["Ana", "Bo", "Cy"]', "for i in range(len(names)):", "    print(i, names[i])"),
+    note: "range(len(names)) gives the POSITIONS 0, 1, 2. i is a number; names[i] is the value at that position. Use this when you need to know where you are in the list." },
+  { group: "Values or positions?", id: "pos-change-value", title: "Double each value? (it fails)",
+    code: L("numbers = [1, 2, 3]", "for x in numbers:", "    x = x * 2", "print(numbers)"),
+    note: "x is a copy of the value, not a box inside the list. Watch x change while the list stays [1, 2, 3]. The next example shows how to really change the list." },
+  { group: "Values or positions?", id: "pos-change-position", title: "Double each value through its position",
+    code: L("numbers = [1, 2, 3]", "for i in range(len(numbers)):", "    numbers[i] = numbers[i] * 2", "print(numbers)"),
+    note: "numbers[i] = ... writes into the list at position i. Watch the list boxes change one by one. To change the items of a list, you need their positions." },
+  { group: "Values or positions?", id: "pos-neighbours", title: "Compare each item with the next",
+    code: L("temps = [12, 15, 11, 18]", "rises = 0", "for i in range(len(temps) - 1):", "    if temps[i + 1] > temps[i]:", "        rises = rises + 1", "print(rises)"),
+    note: "To compare an item with its neighbour you need positions: temps[i] and temps[i + 1]. Why does the loop stop at len(temps) - 1? Watch the last value of i." },
+  { group: "Values or positions?", id: "pos-where", title: "Where is it?",
+    code: L('letters = ["c", "a", "t", "a"]', "for i in range(len(letters)):", '    if letters[i] == "a":', '        print("found at position", i)'),
+    note: "The question is WHERE, so you need positions. Looping over the values would tell you that an 'a' is there, but not at which position." },
   { group: "while loops", id: "countdown", title: "Countdown",
     code: L("n = 3", "while n > 0:", "    print(n)", "    n = n - 1", 'print("lift-off!")'),
     note: "Every while loop has three parts: INIT (n = 3), CONDITION (n > 0) and UPDATE (n = n - 1)." },
@@ -1355,14 +1373,14 @@ const PRESETS = [
   { group: "Spot the bug", id: "bug-reset", title: "Bug: the total keeps resetting",
     code: L("prices = [1.5, 2.0, 3.5]", "for price in prices:", "    total = 0", "    total = total + price", "print(total)"),
     note: "This should print 7.0. Find the first step where total is not what you expect, then press Edit code and fix it." },
-  { group: "Spot the bug", id: "bug-index", title: "Bug: value used as a position",
+  { group: "Values or positions?", id: "bug-index", title: "Bug: value used as a position",
     code: L("numbers = [1, 2, 3]", "total = 0", "for x in numbers:", "    total = total + numbers[x]", "print(total)"),
-    note: "This should print 6. Is x a position or a value? Watch numbers[x] closely." },
+    note: "Bug. This should print 6. x is a VALUE from the list (1, 2, 3), but numbers[x] uses it as a POSITION. Watch which item numbers[x] picks, then press Edit code and fix it." },
   { group: "Spot the bug", id: "bug-forever", title: "Bug: a loop that never ends",
     code: L("n = 3", "result = []", "while n > 0:", "    result.append(n)", "print(result)"),
     note: "This should print [3, 2, 1]. Press Play: Loop Lab stops the program after 300 steps. Which line is missing?" },
 ];
-const TRACE_IDS = ["sum", "inside", "counter", "best", "search", "loopvar", "countdown", "doubling", "nested", "digits"];
+const TRACE_IDS = ["sum", "inside", "counter", "best", "search", "loopvar", "pos-positions", "pos-change-value", "pos-change-position", "pos-neighbours", "countdown", "doubling", "nested", "digits"];
 
 // Puzzles: lines are written in SOLUTION order with their indentation (4 spaces per level).
 // The page shuffles them (always the same way for a given puzzle) and adds the trap line.
