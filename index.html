@@ -194,6 +194,12 @@ textarea.editor {
 .cells.chars .cell { min-width: 1.9em; }
 .cells.chars .cell .v { padding: 2px 4px; }
 .cell .v.space { color: var(--muted); }
+/* a dictionary in Variables: one row per key, new or changed entries highlighted */
+.dict { border-collapse: collapse; font-family: var(--font-code); font-size: 0.88rem; }
+.dict td { border: 1px solid var(--line); padding: 2px 8px; background: var(--surface); color: var(--ink); white-space: nowrap; }
+.dict td.k { color: var(--muted); }
+.dict td.arrow { border-left: 0; border-right: 0; padding: 2px 0; color: var(--muted); }
+.dict tr.chg td { background: var(--mark); color: var(--mark-ink); }
 @media (prefers-reduced-motion: no-preference) {
   .var.flash { animation: flash 0.7s ease-out; }
   @keyframes flash { from { transform: scale(1.03); } to { transform: none; } }
@@ -272,7 +278,9 @@ textarea.editor {
 .task { display: grid; gap: 8px; }
 .task p { margin: 0; }
 .given { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.92rem; }
-.given code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; white-space: pre; }
+.given > span { min-width: 0; max-width: 100%; }
+/* long setup lines (e.g. a list of pairs) wrap instead of making the page wider than a phone */
+.given code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .board { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; align-items: start; }
 .pool, .program { list-style: none; margin: 0; padding: 10px; display: grid; gap: 6px; min-height: 120px; background: var(--code-bg); border-radius: 0 0 var(--radius) var(--radius); }
 .pool button {
@@ -516,8 +524,11 @@ kbd {
             <code>elif</code> / <code>else</code>, <code>break</code>, <code>continue</code>, <code>print</code>,
             <code>range</code>, <code>len</code>, <code>min</code>, <code>max</code>, <code>sum</code>,
             <code>.append()</code>, slices like <code>word[1:3]</code> and <code>word[::-1]</code>, and common string methods
-            (<code>.upper()</code>, <code>.split()</code>, <code>.replace()</code>, <code>.find()</code>, <code>.startswith()</code>, ...).</p>
-          <p class="small">Not supported: functions (<code>def</code>, <code>return</code>), <code>input()</code>, f-strings, dictionaries.
+            (<code>.upper()</code>, <code>.split()</code>, <code>.replace()</code>, <code>.find()</code>, <code>.startswith()</code>, ...),
+            dictionaries (<code>d[key]</code>, <code>.get()</code>, <code>.items()</code>, ...), pairs (tuples) and unpacking
+            (<code>for key, value in d.items()</code>) and <code>enumerate</code>.</p>
+          <p class="small">Not supported: functions (<code>def</code>, <code>return</code>), <code>input()</code>, f-strings, sets,
+            <code>del</code>, <code>sorted()</code>.
             Programs stop after 300 steps, so an endless loop cannot freeze the page.</p>
         </div>
       </div>
@@ -660,7 +671,7 @@ kbd {
       <span class="reset" data-reset></span>
     </div>
     <div class="panel">
-      <div class="panel-head"><span class="label">Choose a puzzle</span><span class="stepcount">7 sections, from easier to harder. A green number is solved.</span></div>
+      <div class="panel-head"><span class="label">Choose a puzzle</span><span class="stepcount">8 sections, from easier to harder. A green number is solved.</span></div>
       <div class="panel-body pz-sections" id="pzPick" role="group" aria-label="Choose a puzzle"></div>
     </div>
     <div class="panel">
@@ -707,6 +718,28 @@ class PyRange {
   }
   at(i) { return this.start + i * this.step; }
 }
+class PyTuple { constructor(items) { this.items = items; } get length() { return this.items.length; } }
+// A dictionary keeps its keys in insertion order, like Python. hashKey() makes 1, 1.0 and True the same key.
+class PyDict {
+  constructor() { this.map = new Map(); }
+  get size() { return this.map.size; }
+  has(k) { return this.map.has(hashKey(k)); }
+  get(k) { return this.map.get(hashKey(k)) || null; }
+  set(k, v) { const h = hashKey(k), e = this.map.get(h); if (e) e.value = v; else this.map.set(h, { key: k, value: v }); }
+  del(k) { this.map.delete(hashKey(k)); }
+  entries() { return [...this.map.values()]; }
+  keys() { return this.entries().map(e => e.key); }
+  values() { return this.entries().map(e => e.value); }
+}
+// d.keys(), d.values(), d.items(): live views on the dictionary
+class PyView {
+  constructor(kind, dict) { this.kind = kind; this.dict = dict; }
+  get length() { return this.dict.size; }
+  pick(e) { return this.kind === "keys" ? e.key : this.kind === "values" ? e.value : new PyTuple([e.key, e.value]); }
+  list() { return this.dict.entries().map(e => this.pick(e)); }
+}
+// enumerate(...) and zip(...): single-use, like in Python
+class PyIter { constructor(name, items) { this.name = name; this.items = items; this.i = 0; } }
 class Builtin { constructor(name, fn) { this.name = name; this.fn = fn; } }
 class Method { constructor(name, fn) { this.name = name; this.fn = fn; } }
 const BREAK = { signal: "break" }, CONTINUE = { signal: "continue" };
@@ -769,9 +802,9 @@ function tokenize(src) {
       if (["**", "//", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%="].includes(two)) {
         toks.push({ t: "OP", v: two, line }); i += 2; continue;
       }
-      if ("+-*/%<>=()[],:.".includes(c)) {
-        if (c === "(" || c === "[") depth++;
-        if (c === ")" || c === "]") depth = Math.max(0, depth - 1);
+      if ("+-*/%<>=()[]{},:.".includes(c)) {
+        if (c === "(" || c === "[" || c === "{") depth++;
+        if (c === ")" || c === "]" || c === "}") depth = Math.max(0, depth - 1);
         toks.push({ t: "OP", v: c, line }); i++; continue;
       }
       throw new PyError("SyntaxError", `Python does not understand the character ${c}`, line);
@@ -839,12 +872,16 @@ class Parser {
         }
         case "for": {
           this.p++;
-          const name = this.need("NAME", undefined, "after for comes a variable name, as in: for x in ...");
+          const names = [this.need("NAME", undefined, "after for comes a variable name, as in: for x in ...").v];
+          while (this.take("OP", ","))
+            names.push(this.need("NAME", undefined, "after the comma comes another variable name, as in: for key, value in ...").v);
           this.need("KW", "in", "a for loop needs 'in', as in: for x in ...");
           const iter = this.expr();
           this.loops++; const body = this.block("for"); this.loops--;
           this.kinds[line] = "for";
-          return { type: "for", line, target: name.v, iter, body };
+          const target = names.length === 1 ? { type: "name", name: names[0] }
+            : { type: "tuple", items: names.map(n => ({ type: "name", name: n })) };
+          return { type: "for", line, target, iter, body };
         }
         case "while": {
           this.p++;
@@ -861,14 +898,16 @@ class Parser {
         case "pass": this.p++; this.endLine(); return { type: "pass", line };
         case "else": case "elif":
           throw new PyError("SyntaxError", `this '${k.v}' has no matching 'if' above it. It must be indented exactly like its if.`, line);
+        case "del":
+          throw new PyError("SyntaxError", "del is not supported in Loop Lab. To remove a key from a dictionary, use d.pop(key)", line);
         case "def": case "return":
           throw new PyError("SyntaxError", "Loop Lab runs plain code only: functions (def and return) are not supported here", line);
       }
     }
-    const e = this.expr();
+    const e = this.exprList();
     if (this.is("OP", "=")) {
-      this.p++; this.checkTarget(e, line);
-      const value = this.expr(); this.endLine();
+      this.p++; this.checkTarget(e, line, true);
+      const value = this.exprList(); this.endLine();
       this.kinds[line] = "assign";
       return { type: "assign", line, target: e, value };
     }
@@ -888,13 +927,30 @@ class Parser {
     if (this.is("OP", ":")) throw new PyError("SyntaxError", "unexpected ':'. Only lines starting with for, while, if, elif or else end with a colon", this.cur.line);
     throw new PyError("SyntaxError", `Python didn't expect ${describe(this.cur)} here`, this.cur.line);
   }
-  checkTarget(e, line) {
+  // a, b = ...  (several targets) is allowed in plain assignments and for loops, not in +=
+  checkTarget(e, line, allowTuple) {
+    if (e.type === "tuple") {
+      if (!allowTuple) throw new PyError("SyntaxError", "+=, -= and the like work with one variable at a time", line);
+      e.items.forEach(x => this.checkTarget(x, line, false));
+      return;
+    }
     if (e.type === "slice")
       throw new PyError("SyntaxError", "changing a whole slice (a[1:3] = ...) is not supported in Loop Lab", line);
     if (e.type !== "name" && e.type !== "index")
       throw new PyError("SyntaxError", "you can only give a value to a variable (x = ...) or a list position (x[i] = ...)", line);
   }
   expr() { return this.or(); }
+  // x, y  without brackets (a tuple), e.g. a, b = b, a
+  exprList() {
+    const first = this.expr();
+    if (!this.is("OP", ",")) return first;
+    const items = [first];
+    while (this.take("OP", ",")) {
+      if (this.is("NEWLINE") || this.is("EOF") || this.is("OP", "=")) break;
+      items.push(this.expr());
+    }
+    return { type: "tuple", items };
+  }
   or() { let l = this.and(); while (this.take("KW", "or")) l = { type: "bool", op: "or", l, r: this.and() }; return l; }
   and() { let l = this.not(); while (this.take("KW", "and")) l = { type: "bool", op: "and", l, r: this.not() }; return l; }
   not() { if (this.take("KW", "not")) return { type: "not", e: this.not() }; return this.cmp(); }
@@ -975,7 +1031,35 @@ class Parser {
     if (k.t === "KW" && (k.v === "True" || k.v === "False" || k.v === "None")) {
       this.p++; return { type: "const", v: k.v === "True" ? true : k.v === "False" ? false : null };
     }
-    if (this.take("OP", "(")) { const e = this.expr(); this.need("OP", ")", "a ')' is missing"); return e; }
+    if (this.take("OP", "(")) {
+      if (this.take("OP", ")")) return { type: "tuple", items: [] };
+      const e = this.expr();
+      if (this.take("OP", ",")) {
+        const items = [e];
+        while (!this.is("OP", ")")) { items.push(this.expr()); if (!this.take("OP", ",")) break; }
+        this.need("OP", ")", "a ')' is missing");
+        return { type: "tuple", items };
+      }
+      this.need("OP", ")", "a ')' is missing");
+      return e;
+    }
+    if (this.take("OP", "{")) {
+      const pairs = [];
+      const comp = () => new PyError("SyntaxError", "comprehensions like {k: v for ...} are not supported in Loop Lab. Use a loop", this.cur.line);
+      while (!this.is("OP", "}")) {
+        const key = this.expr();
+        if (this.is("KW", "for")) throw comp();
+        if (!this.is("OP", ":"))
+          throw new PyError("SyntaxError", "sets like {1, 2} are not supported in Loop Lab. A dictionary needs key: value pairs", this.cur.line);
+        this.p++;
+        const value = this.expr();
+        if (this.is("KW", "for")) throw comp();
+        pairs.push([key, value]);
+        if (!this.take("OP", ",")) break;
+      }
+      this.need("OP", "}", "a '}' is missing");
+      return { type: "dict", pairs };
+    }
     if (this.take("OP", "[")) {
       const items = [];
       while (!this.is("OP", "]")) { items.push(this.expr()); if (!this.take("OP", ",")) break; }
@@ -998,6 +1082,10 @@ function typeName(x) {
   if (typeof x === "string") return "str";
   if (Array.isArray(x)) return "list";
   if (x instanceof PyRange) return "range";
+  if (x instanceof PyTuple) return "tuple";
+  if (x instanceof PyDict) return "dict";
+  if (x instanceof PyView) return "dict_" + x.kind;
+  if (x instanceof PyIter) return x.name;
   return "function";
 }
 function floatRepr(v) {
@@ -1018,6 +1106,14 @@ function repr(x, depth = 0) {
   }
   if (Array.isArray(x)) return depth > 3 ? "[...]" : "[" + x.map(v => repr(v, depth + 1)).join(", ") + "]";
   if (x instanceof PyRange) return x.step === 1 ? `range(${x.start}, ${x.stop})` : `range(${x.start}, ${x.stop}, ${x.step})`;
+  if (x instanceof PyTuple) {
+    if (depth > 3) return "(...)";
+    const r = x.items.map(v => repr(v, depth + 1));
+    return r.length === 1 ? `(${r[0]},)` : `(${r.join(", ")})`;
+  }
+  if (x instanceof PyDict) return depth > 3 ? "{...}" : "{" + x.entries().map(e => repr(e.key, depth + 1) + ": " + repr(e.value, depth + 1)).join(", ") + "}";
+  if (x instanceof PyView) return `dict_${x.kind}(${repr(x.list(), depth + 1)})`;
+  if (x instanceof PyIter) return `<${x.name} object>`;
   if (x instanceof Builtin) return `<built-in function ${x.name}>`;
   if (x instanceof Method) return `<built-in method ${x.name}>`;
   return String(x);
@@ -1028,13 +1124,25 @@ function truthy(x) {
   if (typeof x === "number") return x !== 0;
   if (x instanceof PyFloat) return x.v !== 0;
   if (typeof x === "string" || Array.isArray(x)) return x.length > 0;
-  if (x instanceof PyRange) return x.length > 0;
+  if (x instanceof PyRange || x instanceof PyTuple || x instanceof PyView) return x.length > 0;
+  if (x instanceof PyDict) return x.size > 0;
   return true;
 }
 function eq(a, b) {
   if (isNumLike(a) && isNumLike(b)) return num(a) === num(b);
   if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => eq(v, b[i]));
+  if (a instanceof PyTuple && b instanceof PyTuple) return eq(a.items, b.items);
+  if (a instanceof PyDict && b instanceof PyDict)
+    return a.size === b.size && a.entries().every(e => { const o = b.get(e.key); return o !== null && eq(e.value, o.value); });
   return a === b;
+}
+// key for a dictionary entry; lists and dictionaries cannot be keys (as in Python)
+function hashKey(v) {
+  if (typeof v === "string") return "s" + v;
+  if (isNumLike(v)) { const n = num(v); return "n" + (n === 0 ? 0 : n); }
+  if (v === null) return "N";
+  if (v instanceof PyTuple) return "t" + JSON.stringify(v.items.map(hashKey));
+  throw err("TypeError", `unhashable type: '${typeName(v)}'`);
 }
 function compare(op, a, b) {
   if (op === "==") return eq(a, b);
@@ -1042,10 +1150,11 @@ function compare(op, a, b) {
   if (op === "in" || op === "not in") { const r = contains(b, a); return op === "in" ? r : !r; }
   const bothNum = isNumLike(a) && isNumLike(b);
   const bothStr = typeof a === "string" && typeof b === "string";
-  const bothList = Array.isArray(a) && Array.isArray(b);
+  const bothList = (Array.isArray(a) && Array.isArray(b)) || (a instanceof PyTuple && b instanceof PyTuple);
   if (!bothNum && !bothStr && !bothList)
     throw err("TypeError", `'${op}' not supported between instances of '${typeName(a)}' and '${typeName(b)}'`);
   const lt = (x, y) => {
+    if (x instanceof PyTuple) { x = x.items; y = y.items; }
     if (Array.isArray(x)) {
       for (let i = 0; i < Math.min(x.length, y.length); i++) if (!eq(x[i], y[i])) return compare("<", x[i], y[i]);
       return x.length < y.length;
@@ -1065,6 +1174,10 @@ function contains(container, item) {
     if (typeof item !== "string") throw err("TypeError", `'in <string>' requires string as left operand, not ${typeName(item)}`);
     return container.includes(item);
   }
+  if (container instanceof PyTuple) return container.items.some(v => eq(v, item));
+  if (container instanceof PyDict) return container.has(item);
+  if (container instanceof PyView) return container.kind === "keys" ? container.dict.has(item) : container.list().some(v => eq(v, item));
+  if (container instanceof PyIter) { while (container.i < container.items.length) if (eq(container.items[container.i++], item)) return true; return false; }
   if (container instanceof PyRange) {
     if (typeof item !== "number") return false;
     for (let i = 0; i < container.length; i++) if (container.at(i) === item) return true;
@@ -1088,6 +1201,8 @@ function binop(op, a, b) {
   if (op === "+") {
     if (typeof a === "string" && typeof b === "string") return a + b;
     if (Array.isArray(a) && Array.isArray(b)) return a.concat(b);
+    if (a instanceof PyTuple && b instanceof PyTuple) return new PyTuple(a.items.concat(b.items));
+    if (a instanceof PyTuple) throw err("TypeError", `can only concatenate tuple (not "${typeName(b)}") to tuple`);
     if (typeof a === "string") throw err("TypeError", `can only concatenate str (not "${typeName(b)}") to str`);
     if (Array.isArray(a)) throw err("TypeError", `can only concatenate list (not "${typeName(b)}") to list`);
   }
@@ -1096,6 +1211,8 @@ function binop(op, a, b) {
       if (n * s.length > 100000) throw err("MemoryError", "that would be too big for Loop Lab");
       return typeof s === "string" ? s.repeat(Math.max(0, n)) : [].concat(...Array(Math.max(0, n)).fill(s));
     };
+    if (a instanceof PyTuple && typeof b === "number") return new PyTuple(rep(a.items, b));
+    if (b instanceof PyTuple && typeof a === "number") return new PyTuple(rep(b.items, a));
     if ((typeof a === "string" || Array.isArray(a)) && typeof b === "number") return rep(a, b);
     if ((typeof b === "string" || Array.isArray(b)) && typeof a === "number") return rep(b, a);
   }
@@ -1105,10 +1222,24 @@ function makeIter(x) {
   let i = 0;
   if (Array.isArray(x) || typeof x === "string") return () => i < x.length ? { v: x[i++] } : null;
   if (x instanceof PyRange) { const n = x.length; return () => i < n ? { v: x.at(i++) } : null; }
+  if (x instanceof PyTuple) { const a = x.items; return () => i < a.length ? { v: a[i++] } : null; }
+  if (x instanceof PyDict || x instanceof PyView) {
+    // like Python: the keys are fixed at the start, values are read as we go,
+    // and adding or removing a key during the loop is an error
+    const d = x instanceof PyDict ? x : x.dict, view = x instanceof PyDict ? new PyView("keys", d) : x;
+    const keys = d.keys(), n0 = d.size;
+    return () => {
+      if (d.size !== n0) throw err("RuntimeError", "dictionary changed size during iteration");
+      if (i >= keys.length) return null;
+      return { v: view.pick(d.get(keys[i++])) };
+    };
+  }
+  if (x instanceof PyIter) return () => x.i < x.items.length ? { v: x.items[x.i++] } : null;
   throw err("TypeError", `'${typeName(x)}' object is not iterable`);
 }
 // Python's slice rules (same results as Python for any start, stop, step, including negatives)
 function getSlice(o, start, stop, step) {
+  if (o instanceof PyTuple) return new PyTuple(getSlice(o.items, start, stop, step));
   for (const v of [start, stop, step])
     if (v !== null && typeof v !== "number")
       throw err("TypeError", "slice indices must be integers or None");
@@ -1146,6 +1277,12 @@ function getItem(o, i) {
   if (Array.isArray(o)) return o[position(o, i, "list")];
   if (typeof o === "string") return o[position(o, i, "string")];
   if (o instanceof PyRange) return o.at(position(o, i, "range"));
+  if (o instanceof PyTuple) return o.items[position(o.items, i, "tuple")];
+  if (o instanceof PyDict) {
+    const e = o.get(i);
+    if (e === null) throw err("KeyError", repr(i));
+    return e.value;
+  }
   throw err("TypeError", `'${typeName(o)}' object is not subscriptable`);
 }
 function argc(a, n, name) {
@@ -1160,6 +1297,31 @@ function getAttr(o, name) {
       return a.length ? o.splice(position(o, a[0], "pop"), 1)[0] : o.pop();
     });
     if (name === "count") return M(a => { argc(a, 1, "count"); return o.filter(v => eq(v, a[0])).length; });
+  }
+  if (o instanceof PyDict) {
+    if (name === "get") return M(a => {
+      if (a.length < 1 || a.length > 2) throw err("TypeError", `get expected 1 or 2 arguments, got ${a.length}`);
+      const e = o.get(a[0]);
+      return e !== null ? e.value : a.length > 1 ? a[1] : null;
+    });
+    for (const kind of ["keys", "values", "items"])
+      if (name === kind) return M(a => { argc(a, 0, kind); return new PyView(kind, o); });
+    if (name === "pop") return M(a => {
+      if (a.length < 1 || a.length > 2) throw err("TypeError", `pop expected 1 or 2 arguments, got ${a.length}`);
+      const e = o.size ? o.get(a[0]) : null;   // like Python: an empty dictionary never checks the key
+      if (e !== null) { o.del(a[0]); return e.value; }
+      if (a.length > 1) return a[1];
+      throw err("KeyError", repr(a[0]));
+    });
+  }
+  if (o instanceof PyTuple) {
+    if (name === "count") return M(a => { argc(a, 1, "count"); return o.items.filter(v => eq(v, a[0])).length; });
+    if (name === "index") return M(a => {
+      argc(a, 1, "index");
+      const i = o.items.findIndex(v => eq(v, a[0]));
+      if (i < 0) throw err("ValueError", "tuple.index(x): x not in tuple");
+      return i;
+    });
   }
   if (typeof o === "string") {
     if (name === "lower") return M(() => o.toLowerCase());
@@ -1225,7 +1387,8 @@ function run(src, opts = {}) {
   const snap = () => {
     const vars = [];
     for (const [name, v] of env) vars.push({ name, repr: repr(v), type: typeName(v), items: Array.isArray(v) ? v.map(x => repr(x)) : null,
-      chars: typeof v === "string" && v.length > 0 && v.length <= 24 ? [...v] : null });
+      chars: typeof v === "string" && v.length > 0 && v.length <= 24 ? [...v] : null,
+      entries: v instanceof PyDict ? v.entries().map(e => [repr(e.key), repr(e.value)]) : null });
     return vars;
   };
   function finalize(extra) {
@@ -1256,7 +1419,8 @@ function run(src, opts = {}) {
     len: a => {
       argc(a, 1, "len");
       const x = a[0];
-      if (typeof x === "string" || Array.isArray(x) || x instanceof PyRange) return x.length;
+      if (typeof x === "string" || Array.isArray(x) || x instanceof PyRange || x instanceof PyTuple || x instanceof PyView) return x.length;
+      if (x instanceof PyDict) return x.size;
       throw err("TypeError", `object of type '${typeName(x)}' has no len()`);
     },
     str: a => a.length ? pyStr(a[0]) : "",
@@ -1281,6 +1445,38 @@ function run(src, opts = {}) {
     min: a => best(a, "<", "min"),
     max: a => best(a, ">", "max"),
     input: () => { throw err("NotSupported", "input() does not work in Loop Lab. Give the variable a value directly, e.g. n = 5"); },
+    tuple: a => new PyTuple(a.length ? iterList(a[0]) : []),
+    dict: a => {
+      const d = new PyDict();
+      if (!a.length) return d;
+      if (a[0] instanceof PyDict) { for (const e of a[0].entries()) d.set(e.key, e.value); return d; }
+      iterList(a[0]).forEach((p, i) => {
+        let kv;
+        try { kv = iterList(p); }
+        catch (e) { throw err("TypeError", `cannot convert dictionary update sequence element #${i} to a sequence`); }
+        if (kv.length !== 2) throw err("ValueError", `dictionary update sequence element #${i} has length ${kv.length}; 2 is required`);
+        d.set(kv[0], kv[1]);
+      });
+      return d;
+    },
+    enumerate: (a, kw) => {
+      if (a.length < 1 || a.length > 2) throw err("TypeError", `enumerate expected 1 or 2 arguments, got ${a.length}`);
+      const start = a.length === 2 ? a[1] : kw.start !== undefined ? kw.start : 0;
+      if (typeof start !== "number") throw err("TypeError", `'${typeName(start)}' object cannot be interpreted as an integer`);
+      return new PyIter("enumerate", iterList(a[0]).map((v, i) => new PyTuple([start + i, v])));
+    },
+    zip: a => {
+      const lists = a.map(iterList);
+      const n = lists.length ? Math.min(...lists.map(l => l.length)) : 0;
+      return new PyIter("zip", Array.from({ length: n }, (_, i) => new PyTuple(lists.map(l => l[i]))));
+    },
+  };
+  // keyword arguments each builtin accepts; anything else gets a clear message
+  const KW_OK = { print: ["sep", "end"], enumerate: ["start"] };
+  const NOT_SUPPORTED = {
+    sorted: "sorted() is not supported in Loop Lab",
+    set: "sets are not supported in Loop Lab",
+    reversed: "reversed() is not supported in Loop Lab. Use a slice: items[::-1]",
   };
   function best(a, op, name) {
     const items = a.length === 1 ? iterList(a[0]) : a;
@@ -1298,8 +1494,15 @@ function run(src, opts = {}) {
       case "name":
         if (env.has(e.name)) return env.get(e.name);
         if (BUILTINS[e.name]) return BUILTINS[e.name];
+        if (NOT_SUPPORTED[e.name]) throw err("NotSupported", NOT_SUPPORTED[e.name]);
         throw err("NameError", `name '${e.name}' is not defined`);
       case "list": return e.items.map(ev);
+      case "tuple": return new PyTuple(e.items.map(ev));
+      case "dict": {
+        const d = new PyDict();
+        for (const [k, v] of e.pairs) { const key = ev(k); d.set(key, ev(v)); }
+        return d;
+      }
       case "neg": {
         const v = ev(e.e);
         if (!isNumLike(v)) throw err("TypeError", `bad operand type for unary -: '${typeName(v)}'`);
@@ -1327,6 +1530,11 @@ function run(src, opts = {}) {
       case "call": {
         const f = ev(e.fn), args = e.args.map(ev), kw = {};
         for (const k in e.kwargs) kw[k] = ev(e.kwargs[k]);
+        const allowed = f instanceof Builtin ? KW_OK[f.name] || [] : [];
+        for (const k in kw) if (!allowed.includes(k)) {
+          if (k === "key") throw err("NotSupported", "key= is not supported in Loop Lab. Use a loop with 'best so far' instead");
+          throw err("TypeError", `${f.name}() got an unexpected keyword argument '${k}'`);
+        }
         if (f instanceof Builtin || f instanceof Method) return f.fn(args, kw);
         throw err("TypeError", `'${typeName(f)}' object is not callable`);
       }
@@ -1334,8 +1542,20 @@ function run(src, opts = {}) {
   }
   function assign(t, v) {
     if (t.type === "name") { env.set(t.name, v); return; }
+    if (t.type === "tuple") {
+      // unpacking: a, b = (1, 2)   or   for key, value in d.items()
+      let vals;
+      try { vals = iterList(v); }
+      catch (e) { if (e instanceof PyError && e.kind === "TypeError") throw err("TypeError", `cannot unpack non-iterable ${typeName(v)} object`); throw e; }
+      const n = t.items.length;
+      if (vals.length > n) throw err("ValueError", `too many values to unpack (expected ${n})`);
+      if (vals.length < n) throw err("ValueError", `not enough values to unpack (expected ${n}, got ${vals.length})`);
+      t.items.forEach((x, i) => assign(x, vals[i]));
+      return;
+    }
     const o = ev(t.obj), i = ev(t.idx);
     if (Array.isArray(o)) { o[position(o, i, "list assignment")] = v; return; }
+    if (o instanceof PyDict) { o.set(i, v); return; }
     if (typeof o === "string") throw err("TypeError", "'str' object does not support item assignment");
     throw err("TypeError", `'${typeName(o)}' object does not support item assignment`);
   }
@@ -1372,7 +1592,7 @@ function run(src, opts = {}) {
         for (;;) {
           const n = next();
           if (!n) return;
-          env.set(s.target, n.v);
+          assign(s.target, n.v);
           if (!loopBody(s.body)) return;
           lineEvent(s.line);
         }
@@ -1457,6 +1677,9 @@ const PRESETS = [
   { group: "Values or positions?", id: "pos-where", title: "Where is it?",
     code: L('letters = ["c", "a", "t", "a"]', "for i in range(len(letters)):", '    if letters[i] == "a":', '        print("found at position", i)'),
     note: "The question is WHERE, so you need positions. Looping over the values would tell you that an 'a' is there, but not at which position." },
+  { group: "Values or positions?", id: "pos-enumerate", title: "Both at once: enumerate",
+    code: L('names = ["Ana", "Bo", "Cy"]', "for i, name in enumerate(names):", "    print(i, name)"),
+    note: "enumerate gives pairs (position, value), and for i, name in ... unpacks each pair into two variables. You get both, without writing names[i]." },
   { group: "Strings", id: "str-positions", title: "Letters and their positions",
     code: L('word = "loop"', "for i in range(len(word)):", "    print(i, word[i])"),
     note: "A string is a row of letters, each with a position, just like a list. Look at the boxes under word in Variables: the first letter is at position 0." },
@@ -1487,6 +1710,27 @@ const PRESETS = [
   { group: "Strings", id: "str-words", title: "Split a sentence into words",
     code: L('sentence = "loops are fun"', "for w in sentence.split():", "    print(w.upper(), len(w))"),
     note: ".split() cuts the sentence at the spaces and gives a list of words, so the loop goes word by word instead of letter by letter." },
+  { group: "Dictionaries", id: "dict-basics", title: "Keys and values",
+    code: L('ages = {"Ana": 20, "Bo": 22}', 'ages["Cy"] = 19', 'ages["Ana"] = 21', "print(ages)", 'print(ages["Bo"])'),
+    note: "A dictionary connects keys ('Ana') to values (20). ages[key] = value ADDS the key if it is new, and REPLACES its value if the key already exists. Watch the table in Variables." },
+  { group: "Dictionaries", id: "dict-loop", title: "Loop over a dictionary",
+    code: L('ages = {"Ana": 21, "Bo": 22, "Cy": 19}', "for name in ages:", "    print(name, ages[name])"),
+    note: "Looping over a dictionary gives its KEYS, in the order they were added. ages[name] then looks up the value that belongs to each key." },
+  { group: "Dictionaries", id: "dict-items", title: "Keys and values together",
+    code: L('ages = {"Ana": 21, "Bo": 22, "Cy": 19}', "for name, age in ages.items():", "    print(name, age)"),
+    note: ".items() gives (key, value) pairs, and for name, age in ... unpacks each pair. Same output as the previous example, without looking up ages[name]." },
+  { group: "Dictionaries", id: "dict-basket", title: "Basket total",
+    code: L('prices = {"apple": 0.5, "pear": 0.75, "kiwi": 0.4}', 'basket = ["pear", "apple", "pear"]', "total = 0", "for item in basket:", "    total = total + prices[item]", "print(total)"),
+    note: "Accumulator plus look-up: prices[item] finds the price of each item. The loop goes over the basket, not over the dictionary." },
+  { group: "Dictionaries", id: "dict-count", title: "Count the words",
+    code: L('words = "the cat and the hat".split()', "counts = {}", "for w in words:", "    counts[w] = counts.get(w, 0) + 1", "print(counts)"),
+    note: "counts.get(w, 0) gives the count so far, or 0 for a word we have not seen yet. Watch new keys appear, and the count for 'the' go up." },
+  { group: "Dictionaries", id: "dict-totals", title: "Totals per category",
+    code: L('expenses = [("food", 12), ("bus", 3), ("food", 8)]', "totals = {}", "for cat, amount in expenses:", "    if cat not in totals:", "        totals[cat] = 0", "    totals[cat] = totals[cat] + amount", "print(totals)"),
+    note: "Each expense is a pair (category, amount), unpacked into cat and amount. A category gets the start value 0 the first time it appears; then its amount is added." },
+  { group: "Dictionaries", id: "dict-best", title: "Most frequent letter",
+    code: L('text = "banana"', "counts = {}", "for ch in text:", "    counts[ch] = counts.get(ch, 0) + 1", "best = text[0]", "for ch, n in counts.items():", "    if n > counts[best]:", "        best = ch", "print(best)"),
+    note: "Two loops: first count every letter, then 'best so far' over the counts. best starts with a real key (the first letter), not with 0 or an empty string." },
   { group: "while loops", id: "countdown", title: "Countdown",
     code: L("n = 3", "while n > 0:", "    print(n)", "    n = n - 1", 'print("lift-off!")'),
     note: "Every while loop has three parts: INIT (n = 3), CONDITION (n > 0) and UPDATE (n = n - 1)." },
@@ -1499,12 +1743,15 @@ const PRESETS = [
   { group: "Spot the bug", id: "bug-reset", title: "Bug: the total keeps resetting",
     code: L("prices = [1.5, 2.0, 3.5]", "for price in prices:", "    total = 0", "    total = total + price", "print(total)"),
     note: "This should print 7.0. Find the first step where total is not what you expect, then press Edit code and fix it." },
-  { group: "Values or positions?", id: "bug-index", title: "Bug: value used as a position",
+  { group: "Spot the bug", id: "bug-index", title: "Bug: value used as a position",
     code: L("numbers = [1, 2, 3]", "total = 0", "for x in numbers:", "    total = total + numbers[x]", "print(total)"),
     note: "Bug. This should print 6. x is a VALUE from the list (1, 2, 3), but numbers[x] uses it as a POSITION. Watch which item numbers[x] picks, then press Edit code and fix it." },
   { group: "Spot the bug", id: "bug-forever", title: "Bug: a loop that never ends",
     code: L("n = 3", "result = []", "while n > 0:", "    result.append(n)", "print(result)"),
     note: "This should print [3, 2, 1]. Press Play: Loop Lab stops the program after 300 steps. Which line is missing?" },
+  { group: "Spot the bug", id: "dict-bug", title: "Bug: a key that isn't there yet",
+    code: L("counts = {}", 'for w in ["a", "b", "a"]:', "    counts[w] = counts[w] + 1", "print(counts)"),
+    note: "Bug. counts[w] only works if w is already a key. The first word is new, so Python stops with a KeyError. Fix it with counts.get(w, 0), or by checking 'if w in counts' first." },
 ];
 
 // Puzzles: lines are written in SOLUTION order with their indentation (4 spaces per level).
@@ -1688,6 +1935,41 @@ const PUZZLE_SECTIONS = [
         tests: [{ setup: "numbers = [1, 2, 3, 4]\ntarget = 5", out: "2" }, { setup: "numbers = [1, 1, 1]\ntarget = 2", out: "3" }, { setup: "numbers = []\ntarget = 3", out: "0" }],
         trapHint: "The trap is range(len(numbers)) for j: every pair is counted twice, and an item can be paired with itself." },
     ] },
+  { id: "dicts", title: "Dictionaries",
+    tip: "A dictionary connects a key to a value. Read with d[key], add or change with d[key] = ..., and loop over d.items() to get the key and the value together.",
+    puzzles: [
+      { id: "menu", title: "Print the menu", task: "Print every dish and its price, one per line.",
+        lines: ["for dish, price in menu.items():", "    print(dish, price)"],
+        trap: "for dish, price in menu:",
+        tests: [{ setup: 'menu = {"soup": 4, "salad": 6}', out: "soup 4\nsalad 6" }, { setup: 'menu = {"tea": 2}', out: "tea 2" }],
+        trapHint: "The trap is for dish, price in menu: looping over a dictionary gives only its KEYS. Use .items() to get the key and the value together." },
+      { id: "basket", title: "Basket total", task: "Print the total price of everything in the basket.",
+        lines: ["total = 0", "for item in basket:", "    total = total + prices[item]", "print(total)"],
+        trap: 'total = total + prices["item"]',
+        tests: [{ setup: 'prices = {"apple": 2, "pear": 3}\nbasket = ["apple", "pear", "apple"]', out: "7" },
+          { setup: 'prices = {"apple": 2, "pear": 3}\nbasket = ["pear"]', out: "3" }, { setup: 'prices = {"apple": 2}\nbasket = []', out: "0" }],
+        trapHint: 'The trap is prices["item"]: with quotes it looks up the word item itself, which is not a key. Without quotes, item is the variable that holds "apple", "pear", ...' },
+      { id: "countwords", title: "Count the words", task: "Print a dictionary that says how many times each word appears.",
+        lines: ["counts = {}", "for w in words:", "    if w in counts:", "        counts[w] = counts[w] + 1", "    else:", "        counts[w] = 1", "print(counts)"],
+        trap: "counts[w] = 0",
+        tests: [{ setup: 'words = ["a", "b", "a"]', out: "{'a': 2, 'b': 1}" }, { setup: 'words = ["x"]', out: "{'x': 1}" }, { setup: "words = []", out: "{}" }],
+        trapHint: "The trap is counts[w] = 0: the first time a word appears it has been seen once, so its count starts at 1." },
+      { id: "countletters", title: "Count letters with get", task: "Print how many times each letter appears, using .get() instead of an if.",
+        lines: ["counts = {}", "for ch in text:", "    counts[ch] = counts.get(ch, 0) + 1", "print(counts)"],
+        trap: "counts[ch] = counts[ch] + 1",
+        tests: [{ setup: 'text = "banana"', out: "{'b': 1, 'a': 3, 'n': 2}" }, { setup: 'text = "aa"', out: "{'a': 2}" }, { setup: 'text = ""', out: "{}" }],
+        trapHint: "The trap is counts[ch] + 1: the first time a letter appears it is not a key yet, so Python stops with a KeyError. counts.get(ch, 0) gives 0 instead." },
+      { id: "percategory", title: "Total per category", task: "Each expense is a (category, amount) pair. Print the total amount per category.",
+        lines: ["totals = {}", "for cat, amount in expenses:", "    if cat not in totals:", "        totals[cat] = 0", "    totals[cat] = totals[cat] + amount", "print(totals)"],
+        trap: "for cat in expenses:",
+        tests: [{ setup: 'expenses = [("food", 12), ("bus", 3), ("food", 8)]', out: "{'food': 20, 'bus': 3}" }, { setup: 'expenses = [("rent", 500)]', out: "{'rent': 500}" }],
+        trapHint: "The trap is for cat in expenses: each item is a PAIR (category, amount). Unpack it into two variables, otherwise amount does not exist." },
+      { id: "mostfrequent", title: "Most frequent colour", task: "counts says how often each colour was chosen. Print the colour chosen most often (the first one if there is a tie).",
+        lines: ['best = ""', "best_count = 0", "for colour, n in counts.items():", "    if n > best_count:", "        best = colour", "        best_count = n", "print(best)"],
+        trap: "for colour, n in counts:",
+        tests: [{ setup: 'counts = {"red": 3, "blue": 5, "green": 2}', out: "blue" }, { setup: 'counts = {"x": 2, "y": 2}', out: "x" }, { setup: 'counts = {"tan": 1}', out: "tan" }],
+        trapHint: "The trap is for colour, n in counts: that loops over the keys only ('red', 'blue', ...). Use counts.items() to get each colour with its count." },
+    ] },
 ];
 
 // Same shuffle every time for a given puzzle, so the lines do not jump around between visits.
@@ -1730,7 +2012,8 @@ const store = {
   set(k, v) { try { localStorage.setItem("looplab:" + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
 };
 function norm(s) {
-  return String(s).trim().replace(/"/g, "'").replace(/\s+/g, " ").replace(/\s*([,\[\]()])\s*/g, "$1").replace(/,/g, ", ");
+  return String(s).trim().replace(/"/g, "'").replace(/\s+/g, " ").replace(/\s*([,\[\]{}()])\s*/g, "$1").replace(/,/g, ", ")
+    .replace(/\s*:\s*/g, ": ");
 }
 // Is the student's answer the same value as Python's?
 function sameValue(input, expected) {
@@ -1903,6 +2186,17 @@ function renderStep() {
       if (!v.items.length) cells.textContent = "[ ]";
       v.items.forEach((it, i) => cells.append(el("span", { class: "cell" }, el("span", { class: "v", text: it }), el("span", { class: "ix", text: String(i) }))));
       val.append(cells);
+    } else if (v.entries && v.entries.length) {
+      // a dictionary: key -> value rows; highlight keys that are new or whose value changed at this step
+      const before = pos > 1 ? rows[pos - 2].vars.find(x => x.name === v.name) : null;
+      const old = new Map(before && before.entries ? before.entries : []);
+      const table = el("table", { class: "dict" });
+      for (const [k, value] of v.entries) {
+        const isNew = old.get(k) !== value;
+        table.append(el("tr", { class: isNew ? "chg" : "" },
+          el("td", { class: "k", text: k }), el("td", { class: "arrow", text: "\u2192" }), el("td", { text: value })));
+      }
+      val.append(table);
     } else if (v.chars) {
       // a string: one box per character, its position underneath; spaces shown as a visible mark
       const cells = el("span", { class: "cells chars", title: v.repr });
